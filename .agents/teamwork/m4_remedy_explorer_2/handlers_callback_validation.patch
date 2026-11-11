@@ -1,0 +1,53 @@
+--- a/src/bot/handlers.py
++++ b/src/bot/handlers.py
+@@ -141,16 +141,29 @@
+     action, product_id = callback_data.split(":", 1)
+     action = action.strip()
+     product_id = product_id.strip()
+ 
++    if not product_id:
++        return {
++            "success": False,
++            "error": "malformed_callback",
++            "message": "Dữ liệu callback không hợp lệ: thiếu mã sản phẩm.",
++        }
++
+     if action == "approve_product":
+         job_id = f"job_{product_id}"
+         niche_id = "thoi_trang_nu"
+         if session:
+             stmt = select(Product).where(Product.product_id == product_id)
+             res = await session.execute(stmt)
+             product = res.scalars().first()
+-            if product:
+-                product.status = "approved"
+-                niche_id = product.niche_id
++            if not product:
++                return {
++                    "success": False,
++                    "error": "product_not_found",
++                    "message": f"Sản phẩm {product_id} không tồn tại trong hệ thống.",
++                }
++            product.status = "approved"
++            niche_id = product.niche_id
+ 
+                 # Idempotency check: don't create duplicate VideoJob
+                 stmt_job = select(VideoJob).where(VideoJob.product_id == product_id)
+@@ -191,8 +204,14 @@
+             stmt = select(Product).where(Product.product_id == product_id)
+             res = await session.execute(stmt)
+             product = res.scalars().first()
+-            if product:
+-                product.status = "rejected"
+-                await session.commit()
++            if not product:
++                return {
++                    "success": False,
++                    "error": "product_not_found",
++                    "message": f"Sản phẩm {product_id} không tồn tại trong hệ thống.",
++                }
++            product.status = "rejected"
++            await session.commit()
+         return {
+             "success": True,
+             "action": "reject_product",

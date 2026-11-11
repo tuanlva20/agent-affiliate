@@ -1,0 +1,210 @@
+diff --git aa/src/services/browser_adapter.py bb/src/services/browser_adapter.py
+index af278e5..c8777e5 100644
+--- aa/src/services/browser_adapter.py
++++ bb/src/services/browser_adapter.py
+@@ -14,7 +14,7 @@ import os
+ import urllib.parse
+ from contextlib import asynccontextmanager
+ from dataclasses import dataclass
+-from typing import Any, AsyncIterator, Dict, Optional, Tuple, Union
++from typing import Any, AsyncIterator, Dict, List, Optional, Tuple, Union
+ 
+ import aiohttp
+ 
+@@ -172,6 +172,173 @@ def parse_and_validate_proxy(proxy_url: Optional[str]) -> Optional[ProxyConfig]:
+         raise BrowserProxyError(f"Malformed proxy URL '{clean_url}': {e}") from e
+ 
+ 
++# ---------------------------------------------------------------------------
++# In-Memory Stubs for Offline & Mock Automation (Feature F19)
++# ---------------------------------------------------------------------------
++
++class StubMouse:
++    """In-memory stub for Playwright Mouse emulation without external mocks."""
++
++    def __init__(self) -> None:
++        self.x: float = 0.0
++        self.y: float = 0.0
++        self.is_down: bool = False
++        self.scroll_history: list[Tuple[float, float]] = []
++
++    async def move(self, x: float, y: float, **kwargs: Any) -> None:
++        self.x = float(x)
++        self.y = float(y)
++
++    async def down(self, button: str = "left", **kwargs: Any) -> None:
++        self.is_down = True
++
++    async def up(self, button: str = "left", **kwargs: Any) -> None:
++        self.is_down = False
++
++    async def click(self, x: float, y: float, **kwargs: Any) -> None:
++        await self.move(x, y)
++        await self.down()
++        await self.up()
++
++    async def wheel(self, delta_x: float, delta_y: float) -> None:
++        self.scroll_history.append((float(delta_x), float(delta_y)))
++
++
++class StubKeyboard:
++    """In-memory stub for Playwright Keyboard emulation without external mocks."""
++
++    def __init__(self) -> None:
++        self.typed_chars: list[str] = []
++        self.pressed_keys: list[str] = []
++
++    async def type(self, text: str, delay: float = 0, **kwargs: Any) -> None:
++        self.typed_chars.extend(list(text))
++
++    async def press(self, key: str, delay: float = 0, **kwargs: Any) -> None:
++        self.pressed_keys.append(str(key))
++        self.typed_chars.append(str(key))
++
++    async def down(self, key: str) -> None:
++        pass
++
++    async def up(self, key: str) -> None:
++        pass
++
++
++class StubPage:
++    """In-memory stub for Playwright Page supporting full automation lifecycle."""
++
++    def __init__(
++        self,
++        url: str = "about:blank",
++        context: Optional[StubBrowserContext] = None,
++    ) -> None:
++        self.url: str = url
++        self.context: Optional[StubBrowserContext] = context
++        self.is_closed: bool = False
++        self.mouse: StubMouse = StubMouse()
++        self.keyboard: StubKeyboard = StubKeyboard()
++        self.input_files: Dict[str, Any] = {}
++        self.clicked_selectors: list[str] = []
++        self.hovered_selectors: list[str] = []
++        self.viewport_size: Dict[str, int] = {"width": 1280, "height": 800}
++
++    async def goto(self, url: str, **kwargs: Any) -> Any:
++        self.url = str(url)
++        return None
++
++    async def close(self) -> None:
++        self.is_closed = True
++
++    async def click(self, selector: str, **kwargs: Any) -> None:
++        self.clicked_selectors.append(selector)
++
++    async def hover(self, selector: str, **kwargs: Any) -> None:
++        self.hovered_selectors.append(selector)
++
++    async def is_visible(self, selector: str, **kwargs: Any) -> bool:
++        return False
++
++    async def screenshot(self, path: Optional[str] = None, **kwargs: Any) -> bytes:
++        dummy_png = (
++            b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01"
++            b"\x08\x06\x00\x00\x00\x1f\x15c4\x00\x00\x00\nIDATx\x9cc\x00\x01\x00\x00\x05"
++            b"\x00\x01\r\n-\xb4\x00\x00\x00\x00IEND\xaeB`\x82"
++        )
++        if path:
++            parent = os.path.dirname(path)
++            if parent:
++                os.makedirs(parent, exist_ok=True)
++            with open(path, "wb") as f:
++                f.write(dummy_png)
++        return dummy_png
++
++    async def set_input_files(self, selector: str, files: Any, **kwargs: Any) -> None:
++        self.input_files[selector] = files
++
++    async def wait_for_timeout(self, timeout: float) -> None:
++        await asyncio.sleep(min(float(timeout) / 1000.0, 0.01))
++
++    async def evaluate(self, expression: str, arg: Any = None) -> Any:
++        return None
++
++    async def content(self) -> str:
++        return "<html><body></body></html>"
++
++    async def title(self) -> str:
++        return "TikTok"
++
++    async def set_viewport_size(self, viewport_size: Dict[str, int]) -> None:
++        self.viewport_size = viewport_size
++
++
++class StubBrowserContext:
++    """In-memory stub for Playwright BrowserContext."""
++
++    def __init__(
++        self,
++        pages: Optional[list[StubPage]] = None,
++        browser: Optional[StubBrowser] = None,
++    ) -> None:
++        self.browser: Optional[StubBrowser] = browser
++        self.pages: list[StubPage] = pages if pages is not None else []
++        if not self.pages:
++            self.pages.append(StubPage(context=self))
++        else:
++            for p in self.pages:
++                p.context = self
++
++    async def new_page(self) -> StubPage:
++        page = StubPage(context=self)
++        self.pages.append(page)
++        return page
++
++    async def close(self) -> None:
++        for p in list(self.pages):
++            await p.close()
++
++
++class StubBrowser:
++    """In-memory stub for Playwright Browser."""
++
++    def __init__(self, contexts: Optional[list[StubBrowserContext]] = None) -> None:
++        self.contexts: list[StubBrowserContext] = contexts if contexts is not None else []
++        if not self.contexts:
++            self.contexts.append(StubBrowserContext(browser=self))
++        else:
++            for ctx in self.contexts:
++                ctx.browser = self
++
++    async def new_context(self, **kwargs: Any) -> StubBrowserContext:
++        ctx = StubBrowserContext(browser=self)
++        self.contexts.append(ctx)
++        return ctx
++
++    async def close(self) -> None:
++        for ctx in list(self.contexts):
++            await ctx.close()
++
++
+ # ---------------------------------------------------------------------------
+ # BrowserAdapter Service Class
+ # ---------------------------------------------------------------------------
+@@ -497,17 +664,11 @@ class BrowserAdapter:
+                 f"Invalid CDP WebSocket URL '{cdp_url}'. Must begin with ws://"
+             )
+ 
+-        if self.mock_mode and not HAS_PLAYWRIGHT and playwright_instance is None:
+-            from unittest.mock import AsyncMock, MagicMock
+-            mock_page = MagicMock()
+-            mock_page.goto = AsyncMock()
+-            mock_page.close = AsyncMock()
+-            mock_context = MagicMock()
+-            mock_context.pages = [mock_page]
+-            mock_browser = MagicMock()
+-            mock_browser.contexts = [mock_context]
+-            mock_browser.close = AsyncMock()
+-            return mock_browser, mock_context, mock_page
++        if self.mock_mode and playwright_instance is None:
++            stub_page = StubPage()
++            stub_context = StubBrowserContext(pages=[stub_page])
++            stub_browser = StubBrowser(contexts=[stub_context])
++            return stub_browser, stub_context, stub_page
+ 
+         try:
+             if playwright_instance is not None:

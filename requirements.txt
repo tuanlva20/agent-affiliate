@@ -1,0 +1,38 @@
+# Core Framework & Asynchronous I/O
+pydantic>=2.13.0
+pyyaml>=6.0.0
+python-dotenv>=1.0.0
+aiofiles>=24.0.0
+tenacity>=8.5.0
+httpx>=0.27.0
+
+# Database & ORM
+SQLAlchemy>=2.0.30
+asyncpg>=0.29.0
+aiosqlite>=0.20.0
+greenlet>=3.0.0
+
+# Message Broker & Caching
+redis>=5.0.0
+
+# Telegram Command Center
+aiogram>=3.12.0
+
+# Video Remix & Content Pipeline
+yt-dlp>=2024.8.6
+faster-whisper>=1.0.3
+edge-tts>=6.1.12
+ffmpeg-python>=0.2.0
+
+# Anti-Detect Browser Automation
+playwright>=1.46.0
+
+# AI Orchestration & Gemini LLM
+langgraph>=0.2.14
+langchain-core>=0.2.34
+google-genai>=0.1.1
+
+# Testing & Mock Harness
+pytest>=8.0.0
+pytest-asyncio>=0.23.0
+pytest-mock>=3.14.0

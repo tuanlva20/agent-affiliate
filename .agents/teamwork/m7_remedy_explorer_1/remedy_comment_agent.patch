@@ -1,0 +1,50 @@
+--- a/src/agents/comment_agent.py
++++ b/src/agents/comment_agent.py
+@@ -140,6 +140,9 @@
+             r"\bchưa\s*nhận\s*(được|dc)\b|\bhủy\s*(đơn|hàng)\b",
+             r"\b(lỗi|hỏng|rách|bục chỉ|bung chỉ|bị bung|xước|trầy|vỡ|móp)\b",
+             r"\b(chất lượng\s*(kém|tệ)|quá tệ|tệ quá|tệ thật|dở tệ|quá dở|hàng đểu|hàng dỏm|làm ăn chán)\b",
++            r"\b(vải|chất|chất vải|hàng|đồ|áo|váy)\s*(xấu|quá xấu|xấu quá|đểu|dỏm|tệ|kém|mỏng tang|mỏng dính)\b",
++            r"\b(quá xấu|xấu quá|xấu tệ|xấu thật|như giẻ lau|như giẻ rách|giẻ rách|mỏng tang|mỏng dính)\b",
++            r"\b(giá|gia)\s*(quá\s+)?(đắt|chát)\b|\b(đắt|mắc)\s*(quá|qua|wa|thế|kinh|ghê|vãi)\b",
+             r"\b(sai|nhầm)\s*(mẫu|màu|size|sz|hàng)\b|\b(giao|gửi)\s*(sai|thiếu|nhầm)\b",
+             r"\b(không|ko|k)\s*giống\s*(hình|ảnh|mẫu|video|clip|quảng cáo)\b|\bkhác\s*(hình|ảnh|mẫu)\b",
+             r"\b(lừa đảo|lừa tiền|scam|bịp|gian dối|treo đầu dê)\b|\b(shop|sop)\s+lừa\b",
+@@ -158,6 +161,11 @@
+                 r"\b(loi|hong|",
+                 r"\b(loi|bi hong|hang hong|hong roi|hong hoc|do hong|",
+             )
++            # Homograph guard: unaccented dat/mac vs wear (mặc -> mac) and order (đặt -> dat).
++            unacc_p = unacc_p.replace(
++                r"\b(dat|mac)\s*",
++                r"\bgia\s*(dat|mac)\s*",
++            )
+             unacc_complaints.append(unacc_p)
+         self._complaint_unacc_res = [
+             re.compile(p, re.IGNORECASE) for p in unacc_complaints
+@@ -171,11 +179,12 @@
+             r"\b(nhiêu xiền|mấy xiền|nhiu xien|may xien)\b",
+             r"\b(cho\s+)?(e|em|mình|tui|bác)?\s*(xin|hỏi)\s+giá\b",
+             r"\b(inbox|ib|check ib)\s+giá\b",
+-            r"\brổ\s+giá\b",
++            r"\brổ\s+(giá|rá)\b",
+             r"\bbán\s+(sao|giá sao|thế nào|bao nhiêu|nhiêu)\b",
+-            r"\b(giá|nhiêu|nhiu|bn|bnhieu)\s*(\?|\!|\.|\s)*$",
+-            r"^\s*(giá|nhiêu|nhiu|bao nhiêu|bao tiền|bn|bnh|bnhieu)\s*(\?|\!|\.|\s)*$",
+-            r"\b(nhiêu|nhiu)\s+(ạ|thế|vậy|shop|sop|v|z|hả)\b",
++            r"\b(giá|nhiêu|nhiu|bn|bnh|bnhieu|bnhiu)\s*(\?|\!|\.|\s)*$",
++            r"^\s*(giá|nhiêu|nhiu|bao nhiêu|bao tiền|bn|bnh|bnhieu|bnhiu)\s*(\?|\!|\.|\s)*$",
++            r"\b(nhiêu|nhiu|bnhiu|bnhieu|bao nhiêu)\s+(ạ|thế|vậy|shop|sop|v|z|hả)\b",
++            r"\bbn\s+(thế|vậy|v|z|shop|sop|hả)\b",
+         ]
+         self._price_res = [re.compile(p, re.IGNORECASE) for p in raw_prices]
+         self._price_unacc_res = [
+@@ -216,7 +225,7 @@
+             re.IGNORECASE,
+         )
+         self._re_explicit_q = re.compile(
+-            r"\b(bao nhiêu|bao tiền|mấy tiền|mấy đồng|nhiêu|nhiu|bn)\b",
++            r"\b(bao nhiêu|bao tiền|mấy tiền|mấy đồng|nhiêu|nhiu|bn|bnh|bnhieu|bnhiu)\b",
+             re.IGNORECASE,
+         )
+ 

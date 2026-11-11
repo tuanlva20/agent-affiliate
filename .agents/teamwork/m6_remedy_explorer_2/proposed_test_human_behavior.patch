@@ -1,0 +1,97 @@
+--- a/tests/test_human_behavior.py
++++ b/tests/test_human_behavior.py
+@@ -196,4 +196,87 @@
+         assert page.mouse.wheel.call_count >= 1
+ 
++    @pytest.mark.asyncio
++    async def test_warmup_feed_session_genuine_timing_180s(self):
++        """Verify duration_seconds=180 results in genuine 180s sleep without artificial caps."""
++        page = MagicMock()
++        page.goto = AsyncMock()
++        page.mouse = MagicMock()
++        page.mouse.wheel = AsyncMock()
++
++        service = HumanBehaviorService()
++        recorded_sleeps = []
++
++        async def mock_sleep(seconds):
++            recorded_sleeps.append(seconds)
++
++        with patch("asyncio.sleep", side_effect=mock_sleep):
++            success = await service.warmup_feed_session(page, duration_seconds=180, time_scale=1.0)
++
++        assert success is True
++        # Filter for video watch sleeps (duration_seconds / video_count, which is in [36.0, 60.0])
++        video_watch_sleeps = [s for s in recorded_sleeps if s >= 30.0]
++        assert len(video_watch_sleeps) in (3, 4, 5)
++        # Sum of video watch sleeps must equal 180s exactly
++        assert abs(sum(video_watch_sleeps) - 180.0) < 1e-4
++        # Verify no 0.5s artificial cap is present
++        assert all(s > 0.5 for s in video_watch_sleeps)
++
++    @pytest.mark.asyncio
++    async def test_warmup_feed_session_time_scale(self):
++        """Verify time_scale parameter correctly scales sleep durations for fast testing."""
++        page = MagicMock()
++        page.goto = AsyncMock()
++        page.mouse = MagicMock()
++        page.mouse.wheel = AsyncMock()
++
++        service = HumanBehaviorService()
++        recorded_sleeps = []
++
++        async def mock_sleep(seconds):
++            recorded_sleeps.append(seconds)
++
++        with patch("asyncio.sleep", side_effect=mock_sleep):
++            success = await service.warmup_feed_session(page, duration_seconds=180, time_scale=0.1)
++
++        assert success is True
++        video_watch_sleeps = [s for s in recorded_sleeps if s >= 3.0]
++        assert len(video_watch_sleeps) in (3, 4, 5)
++        assert abs(sum(video_watch_sleeps) - 18.0) < 1e-4
++
++    @pytest.mark.asyncio
++    async def test_warmup_feed_session_fast_mode(self):
++        """Verify fast_mode=True scales timing to 0.001 factor."""
++        page = MagicMock()
++        page.goto = AsyncMock()
++        page.mouse = MagicMock()
++        page.mouse.wheel = AsyncMock()
++
++        service = HumanBehaviorService()
++        recorded_sleeps = []
++
++        async def mock_sleep(seconds):
++            recorded_sleeps.append(seconds)
++
++        with patch("asyncio.sleep", side_effect=mock_sleep):
++            success = await service.warmup_feed_session(page, duration_seconds=180, fast_mode=True)
++
++        assert success is True
++        video_watch_sleeps = [s for s in recorded_sleeps if s >= 0.03]
++        assert len(video_watch_sleeps) in (3, 4, 5)
++        assert abs(sum(video_watch_sleeps) - 0.18) < 1e-4
++
++    @pytest.mark.asyncio
++    async def test_warmup_feed_session_validation(self):
++        """Verify ValueError is raised for negative duration or time_scale."""
++        page = MagicMock()
++        service = HumanBehaviorService()
++
++        with pytest.raises(ValueError, match="duration_seconds"):
++            await service.warmup_feed_session(page, duration_seconds=-10)
++
++        with pytest.raises(ValueError, match="time_scale"):
++            await service.warmup_feed_session(page, duration_seconds=10, time_scale=-0.5)
++
++    @pytest.mark.asyncio
++    async def test_warmup_feed_session_zero_duration(self):
++        """Verify zero duration skips warmup cleanly."""
++        page = MagicMock()
++        page.goto = AsyncMock()
++        service = HumanBehaviorService()
++
++        success = await service.warmup_feed_session(page, duration_seconds=0)
++        assert success is True
++        page.goto.assert_not_called()

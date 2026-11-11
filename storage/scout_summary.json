@@ -1,0 +1,22 @@
+[
+  {
+    "product_id": "scout_thoi_trang_nu_001",
+    "niche_id": "thoi_trang_nu",
+    "title": "Váy hoa nhí dáng xòe chiết eo tôn dáng",
+    "price": 189000.0,
+    "commission_rate": 0.15,
+    "score": 9.2,
+    "passed_filter": true,
+    "hook_angle": "Mặc cái này lên eo thon gọn hẳn 5 phân không cần nịt bụng, nhìn mê chữ ê kéo dài!"
+  },
+  {
+    "product_id": "scout_do_gia_dung_001",
+    "niche_id": "do_gia_dung",
+    "title": "Cây lau nhà tự vắt xoay 360 độ Before/After",
+    "price": 149000.0,
+    "commission_rate": 0.15,
+    "score": 9.2,
+    "passed_filter": true,
+    "hook_angle": "Từ ngày tậu em này việc nhà nhàn hẳn, đúng 3s là nhà sạch bóng kin kít các bác ơi!"
+  }
+]

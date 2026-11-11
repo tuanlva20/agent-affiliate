@@ -1,0 +1,154 @@
+app_name: "AMAS"
+version: "1.4.0"
+environment: "development"
+
+# ==============================================================================
+# CẤU HÌNH TRÌNH DUYỆT ẨN DANH (ALIASMODE) & BIOMETRICS ENGINE
+# ==============================================================================
+browser:
+  provider: "aliasmode" # aliasmode | playwright_standalone | camoufox
+  api_url: "http://127.0.0.1:50325"
+  ws_url: null
+  headless: false
+  timeout_ms: 30000
+  warmup_duration_seconds: 180 # 3 phút lướt feed dạo trước khi đăng
+  behavior:
+    typing_min_delay_ms: 80
+    typing_max_delay_ms: 220
+    typo_rate: 0.03 # 3% gõ nhầm và bấm backspace sửa lại
+    backspace_delay_ms: 300
+    micro_pause_min_s: 0.6
+    micro_pause_max_s: 1.4
+    scroll_steps: 5
+    scroll_reverse_ratio: 0.15 # 15% xác suất cuộn ngược quán tính
+
+# ==============================================================================
+# CẤU HÌNH TELEGRAM BOT & TOPIC ROUTING
+# ==============================================================================
+telegram:
+  bot_token: "" # Ghi đè bởi biến môi trường TELEGRAM_BOT_TOKEN
+  admin_id: 0   # Ghi đè bởi biến môi trường ADMIN_TELEGRAM_ID
+  forum_chat_id: null # Ghi đè bởi biến môi trường TELEGRAM_FORUM_CHAT_ID
+  topic_ids:
+    thoi_trang_nu: 2 # Message thread ID cho topic Thời trang nữ
+    do_gia_dung: 4   # Message thread ID cho topic Đồ gia dụng
+    dashboard: 1     # Message thread ID cho topic Tổng quan
+
+# ==============================================================================
+# CẤU HÌNH DATABASE & REDIS
+# ==============================================================================
+database:
+  url: "postgresql+asyncpg://postgres:postgres@localhost:5432/affiliate_db"
+  pool_size: 10
+  max_overflow: 20
+  echo: false
+
+redis:
+  url: "redis://localhost:6379/0"
+
+# ==============================================================================
+# 2 NGÁCH THÍ ĐIỂM (PILOT NICHES)
+# ==============================================================================
+niches:
+  - niche_id: "thoi_trang_nu"
+    name: "Thời trang nữ"
+    telegram_topic_id: 2
+    categories:
+      - "women_clothing"
+      - "vay_dam"
+      - "ao_nu"
+      - "quan_nu"
+      - "set_do_nu"
+    topics:
+      - "phối đồ"
+      - "hack dáng"
+      - "che khuyết điểm bắp tay chân to"
+      - "váy đi tiệc sang chảnh"
+      - "outfit công sở trẻ trung"
+    thresholds:
+      min_price: 99000.0
+      max_price: 650000.0
+      min_commission_rate: 0.10 # Tối thiểu 10%
+      min_sales_7d: 100
+      min_rating: 4.5
+      min_evaluation_score: 7.0 # Thang điểm 10 từ FashionScoutAgent
+    persona:
+      role: "KOC Thời trang nữ Gen Z / Millennial"
+      voice_name: "vi-VN-HoaiMyNeural"
+      tone: "Thân mật, hào hứng, xưng chị em/các bà/tui, am hiểu chất vải và form dáng tôn dáng, cởi mở chân thật"
+      sample_greetings:
+        - "Chị em ơi"
+        - "Mấy bà ơi"
+        - "Bà nào bụng dưới to bơi hết vào đây nha"
+        - "Team chân ngắn đâu rồi bơi vào nhận đồ đẹp nè"
+      sample_hooks:
+        - "Mặc cái này lên eo thon gọn hẳn 5 phân không cần nịt bụng"
+        - "Váy hack dáng đỉnh nhất tui từng thử trong năm nay"
+        - "Đừng mua mẫu váy này nếu sợ bị đồng nghiệp hỏi xin link liên tục"
+      sample_ctas:
+        - "Bấm ngay góc trái nhận mã freeship nha"
+        - "Link tui để ở giỏ hàng góc trái nè"
+        - "Săn ngay mã giảm giá ở giỏ hàng vàng nha mấy bà"
+    banned_keywords:
+      - "zara"
+      - "chanel"
+      - "gucci"
+      - "dior"
+      - "louis vuitton"
+      - "lv"
+      - "hermes"
+      - "nike"
+      - "adidas"
+      - "rep 1:1"
+      - "rep 1 1"
+      - "super fake"
+      - "hàng rep"
+      - "like auth"
+      - "chuẩn auth"
+      - "tuồn auth"
+
+  - niche_id: "do_gia_dung"
+    name: "Đồ gia dụng thông minh"
+    telegram_topic_id: 4
+    categories:
+      - "home_appliances"
+      - "do_nha_bep"
+      - "dung_cu_ve_sinh_thong_minh"
+      - "tien_ich_gia_dinh"
+    topics:
+      - "tiện ích nhà bếp"
+      - "vệ sinh nhà cửa nhàn tênh"
+      - "before-after làm sạch siêu đỉnh"
+      - "tiết kiệm thời gian cho mẹ bỉm"
+      - "đồ gia dụng thông minh giá rẻ"
+    thresholds:
+      min_price: 49000.0
+      max_price: 1200000.0
+      min_commission_rate: 0.12 # Tối thiểu 12%
+      min_sales_7d: 80
+      min_rating: 4.6
+      min_evaluation_score: 7.0 # Thang điểm 10 từ HomeLifeScoutAgent
+    persona:
+      role: "KOC Đồ gia dụng thông minh / Yêu bếp nghiện nhà"
+      voice_name: "vi-VN-NamMinhNeural"
+      tone: "Thực tế, gần gũi, xưng các bác/mấy bà/tui, chú trọng giải phóng sức lao động, nhấn mạnh Before/After 3s"
+      sample_greetings:
+        - "Các bác ơi"
+        - "Bà nào ngại dọn nhà bơi vào đây"
+        - "Chân ái cho hội lười dọn dẹp đây rồi"
+        - "Từ ngày tậu em này việc nhà nhàn hẳn"
+      sample_hooks:
+        - "Bỏ ngay mấy cái giẻ lau cũ đi, dùng cái này nhàn tênh"
+        - "3 giây sạch bóng kin kít không tốn một giọt mồ hôi"
+        - "Cứ tưởng vô dụng mà đỉnh không tưởng các bác ạ"
+      sample_ctas:
+        - "Chị em bấm vào giỏ hàng góc trái nhận ưu đãi nha"
+        - "Đang có mã giảm 20k ở giỏ hàng vàng kìa các bác"
+        - "Link mua chính hãng ở góc trái màn hình nha"
+    banned_keywords:
+      - "trị dứt điểm 100%"
+      - "vĩnh viễn không bám bẩn"
+      - "vĩnh viễn không hỏng"
+      - "100% không bao giờ hỏng"
+      - "thần dược"
+      - "bảo hành trọn đời không hỏng"

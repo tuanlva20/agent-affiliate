@@ -1,0 +1,47 @@
+--- a/tests/test_telegram_bot.py
++++ b/tests/test_telegram_bot.py
+@@ -489,6 +489,28 @@
+         assert result["success"] is False
+         assert result["error"] == "malformed_callback"
+ 
++    @pytest.mark.asyncio
++    async def test_callback_empty_product_id_rejected(self):
++        res_app = await execute_callback("approve_product:", 987654321, 987654321, None)
++        assert res_app["success"] is False
++        assert res_app["error"] == "malformed_callback"
++        assert "thiếu mã sản phẩm" in res_app["message"]
++
++        res_rej = await execute_callback("reject_product:   ", 987654321, 987654321, None)
++        assert res_rej["success"] is False
++        assert res_rej["error"] == "malformed_callback"
++
++    @pytest.mark.asyncio
++    async def test_callback_ghost_product_with_session_rejected(self, db_session: AsyncSession):
++        res_app = await execute_callback("approve_product:prod_ghost_404", 987654321, 987654321, session=db_session)
++        assert res_app["success"] is False
++        assert res_app["error"] == "product_not_found"
++        assert "không tồn tại" in res_app["message"]
++
++        res_rej = await execute_callback("reject_product:prod_ghost_404", 987654321, 987654321, session=db_session)
++        assert res_rej["success"] is False
++        assert res_rej["error"] == "product_not_found"
++
+     @pytest.mark.asyncio
+     async def test_push_to_video_queue_fallback(self):
+@@ -559,6 +581,17 @@
+     @pytest.mark.asyncio
+     async def test_bot_instance_handle_callback_delegation(self, bot, db_session: AsyncSession):
++        prod = Product(
++            product_id="prod_via_center",
++            niche_id="thoi_trang_nu",
++            title="Chân Váy Xếp Ly",
++            price=190000.0,
++            commission_rate=0.10,
++            product_url="https://tiktok.com/@shop/item_vc",
++            status="pending",
++        )
++        db_session.add(prod)
++        await db_session.commit()
+         res = await bot.handle_callback("approve_product:prod_via_center", user_id=987654321, session=db_session)
+         assert res["success"] is True
+         assert res["action"] == "approve_product"

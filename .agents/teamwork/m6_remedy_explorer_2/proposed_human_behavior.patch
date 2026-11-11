@@ -1,0 +1,94 @@
+--- a/src/services/human_behavior.py
++++ b/src/services/human_behavior.py
+@@ -118,6 +118,19 @@
+ class HumanBehaviorService:
+     """Biometrics Engine simulating genuine human interaction on Playwright pages."""
+ 
++    def __init__(self, time_scale: float = 1.0) -> None:
++        """Initialize HumanBehaviorService biometrics engine.
++
++        Args:
++            time_scale: Global timing acceleration factor (default 1.0 for authentic biometrics).
++                Values < 1.0 accelerate timing for testing or simulated environments.
++
++        Raises:
++            ValueError: If time_scale is negative.
++        """
++        if time_scale < 0:
++            raise ValueError("time_scale must be non-negative (>= 0.0)")
++        self.time_scale = time_scale
++
+     @staticmethod
+     async def _safe_await(result: Any) -> Any:
+         """Helper to await coroutines while handling synchronous mocks transparently."""
+@@ -255,30 +268,54 @@
+     async def warmup_feed_session(
+         self,
+         page: Any,
+         duration_seconds: int = 180,
++        time_scale: Optional[float] = None,
++        fast_mode: bool = False,
+     ) -> bool:
+         """Browse tiktok.com feed for designated duration before publishing (Feature F23).
+ 
+         Args:
+             page: Playwright Page instance or mock.
+             duration_seconds: Total warmup session length in seconds (default 180s = 3 mins).
++            time_scale: Optional multiplier for sleep intervals (default None, uses self.time_scale;
++                set to 1.0 for authentic real-time simulation, or < 1.0 in fast test harnesses).
++            fast_mode: Convenience flag; if True, applies an accelerated scale factor (0.001)
++                unless an explicit time_scale is specified. Default is False.
+ 
+         Returns:
+             True upon successful completion.
++
++        Raises:
++            ValueError: If duration_seconds < 0 or effective time_scale < 0.
+         """
+-        logger.info(f"Starting pre-posting feed warmup session ({duration_seconds}s)...")
++        if duration_seconds < 0:
++            raise ValueError("duration_seconds must be a non-negative integer (>= 0)")
++
++        if time_scale is not None:
++            effective_scale = time_scale
++        elif fast_mode:
++            effective_scale = 0.001
++        else:
++            effective_scale = self.time_scale
++
++        if effective_scale < 0:
++            raise ValueError("time_scale must be non-negative (>= 0.0)")
++
++        if duration_seconds == 0:
++            logger.info("Feed warmup session skipped (duration_seconds=0).")
++            return True
++
++        logger.info(
++            f"Starting pre-posting feed warmup session "
++            f"({duration_seconds}s target, time_scale={effective_scale})..."
++        )
+ 
+         if hasattr(page, "goto"):
+             goto_res = page.goto("https://www.tiktok.com")
+             await self._safe_await(goto_res)
+ 
+         video_count = random.randint(3, 5)
+-        watch_per_video = max(0.01, duration_seconds / max(1, video_count))
++        watch_per_video = duration_seconds / max(1, video_count)
+ 
+         for _ in range(video_count):
+-            await asyncio.sleep(min(watch_per_video, 0.5))
++            sleep_duration = watch_per_video * effective_scale
++            if sleep_duration > 0:
++                await asyncio.sleep(sleep_duration)
+ 
+             if random.random() < 0.25 and hasattr(page, "keyboard") and hasattr(page.keyboard, "press"):
+                 press_res = page.keyboard.press("l")
+                 await self._safe_await(press_res)
+-                await asyncio.sleep(0.01)
++                await asyncio.sleep(0.01 * effective_scale)
+ 
+             await self.human_scroll(page, steps=random.randint(2, 4))
+ 
+         logger.info("Feed warmup session completed successfully.")
+         return True
