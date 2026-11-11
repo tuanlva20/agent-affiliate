@@ -74,3 +74,6 @@ models/
 *.wav
 *.srt
 *.vtt
+
+/docs/
+/.agent/
