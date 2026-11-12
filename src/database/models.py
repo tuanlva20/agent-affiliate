@@ -88,6 +88,15 @@ class Channel(Base):
     niche_id: Mapped[str] = mapped_column(
         String(50), ForeignKey("niches.niche_id", ondelete="CASCADE"), nullable=False
     )
+    platform: Mapped[str] = mapped_column(
+        String(30), default="tiktok", server_default="tiktok"
+    )
+    account_type: Mapped[str] = mapped_column(
+        String(30), default="profile", server_default="profile"
+    )
+    platform_metadata: Mapped[Optional[Dict[str, Any]]] = mapped_column(
+        JSONType, nullable=True
+    )
     browser_provider: Mapped[str] = mapped_column(
         String(30), default="aliasmode", server_default="aliasmode"
     )
@@ -217,6 +226,18 @@ class VideoJob(Base):
     source_video_url: Mapped[Optional[str]] = mapped_column(
         String(1000), nullable=True
     )
+    motion_mode: Mapped[str] = mapped_column(
+        String(50), default="replicate_motion_control", server_default="replicate_motion_control"
+    )
+    character_image_url: Mapped[Optional[str]] = mapped_column(
+        String(1000), nullable=True
+    )
+    product_image_url: Mapped[Optional[str]] = mapped_column(
+        String(1000), nullable=True
+    )
+    segments_data: Mapped[Optional[Dict[str, Any]]] = mapped_column(
+        JSONType, nullable=True
+    )
     script: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     audio_path: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     output_video_path: Mapped[Optional[str]] = mapped_column(
@@ -316,3 +337,93 @@ class Metric(Base):
 
     # Relationships
     channel: Mapped["Channel"] = relationship("Channel", back_populates="metrics")
+
+
+class Proxy(Base):
+    """Managed proxy pool inventory for channel assignment."""
+    __tablename__ = "proxies"
+
+    proxy_id: Mapped[str] = mapped_column(String(50), primary_key=True)
+    proxy_url: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
+    protocol: Mapped[str] = mapped_column(String(20), default="http", server_default="http")
+    status: Mapped[str] = mapped_column(String(30), default="unchecked", server_default="unchecked")
+    assigned_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    last_checked_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        default=lambda: datetime.now(timezone.utc),
+    )
+
+
+class MotionAsset(Base):
+    """Motion template and extracted movement patterns for Motion Control."""
+    __tablename__ = "motion_assets"
+
+    asset_id: Mapped[str] = mapped_column(String(50), primary_key=True)
+    source_type: Mapped[str] = mapped_column(String(50), default="competitor_video", server_default="competitor_video")
+    source_url: Mapped[str] = mapped_column(String(1000), nullable=False)
+    cover_url: Mapped[Optional[str]] = mapped_column(String(1000), nullable=True)
+    duration: Mapped[float] = mapped_column(Float, default=0.0, server_default="0.0")
+    motion_features: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSONType, nullable=True)
+    is_official: Mapped[bool] = mapped_column(default=False, server_default="false")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        default=lambda: datetime.now(timezone.utc),
+    )
+
+
+class PublishLog(Base):
+    """Multi-channel video publishing dispatch history and outcomes."""
+    __tablename__ = "publish_logs"
+
+    log_id: Mapped[str] = mapped_column(String(50), primary_key=True)
+    job_id: Mapped[str] = mapped_column(String(50), ForeignKey("video_jobs.job_id", ondelete="CASCADE"), nullable=False)
+    channel_id: Mapped[str] = mapped_column(String(50), ForeignKey("channels.channel_id", ondelete="CASCADE"), nullable=False)
+    platform: Mapped[str] = mapped_column(String(30), default="tiktok", server_default="tiktok")
+    published_video_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    published_url: Mapped[Optional[str]] = mapped_column(String(1000), nullable=True)
+    status: Mapped[str] = mapped_column(String(30), default="pending", server_default="pending")
+    error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    published_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        default=lambda: datetime.now(timezone.utc),
+    )
+
+
+class CompetitorScrapeLog(Base):
+    """Historical record of competitor scanning and scraping runs."""
+    __tablename__ = "competitor_scrape_logs"
+
+    log_id: Mapped[str] = mapped_column(String(50), primary_key=True)
+    competitor_id: Mapped[str] = mapped_column(String(50), ForeignKey("competitors.competitor_id", ondelete="CASCADE"), nullable=False)
+    videos_found: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    status: Mapped[str] = mapped_column(String(30), default="success", server_default="success")
+    error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    scraped_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        default=lambda: datetime.now(timezone.utc),
+    )
+
+
+class CompetitorVideo(Base):
+    """Individual competitor video assets discovered and archived."""
+    __tablename__ = "competitor_videos"
+
+    video_id: Mapped[str] = mapped_column(String(100), primary_key=True)
+    competitor_id: Mapped[str] = mapped_column(String(50), ForeignKey("competitors.competitor_id", ondelete="CASCADE"), nullable=False)
+    video_url: Mapped[str] = mapped_column(String(1000), nullable=False)
+    caption: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    views_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    likes_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    product_url: Mapped[Optional[str]] = mapped_column(String(1000), nullable=True)
+    scraped_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        default=lambda: datetime.now(timezone.utc),
+    )
+
