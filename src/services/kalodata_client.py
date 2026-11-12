@@ -128,7 +128,17 @@ class KalodataClient:
             return self._custom_session
         if self._internal_session is None or self._internal_session.closed:
             timeout_cfg = aiohttp.ClientTimeout(total=self.timeout)
-            self._internal_session = aiohttp.ClientSession(timeout=timeout_cfg)
+            connector = None
+            try:
+                import ssl
+                import certifi
+
+                connector = aiohttp.TCPConnector(
+                    ssl=ssl.create_default_context(cafile=certifi.where())
+                )
+            except Exception:
+                connector = None
+            self._internal_session = aiohttp.ClientSession(timeout=timeout_cfg, connector=connector)
         return self._internal_session
 
     def _get_headers(self) -> Dict[str, str]:
@@ -256,7 +266,11 @@ class KalodataClient:
     async def get_top_products(self, category_id: str, limit: int = 10) -> List[Dict[str, Any]]:
         """Formulates query, submits, polls, and returns normalized products."""
         self._ensure_authenticated()
-        query = f"Top {limit} trending affiliate products in category '{category_id}' in Vietnam TikTok Shop"
+        query = (
+            f"Top {limit} trending affiliate products in category '{category_id}' in Vietnam TikTok Shop. "
+            "Return ONLY a JSON array inside a ```json ... ``` code block with fields: "
+            "product_id, title, price, commission_rate, sales_30d, revenue_30d, product_url, image_url."
+        )
         task_id = await self.submit_query(query)
         result_data = await self.poll_task(task_id)
         return self._parse_products(result_data, category_id, limit)
@@ -296,6 +310,7 @@ class KalodataClient:
             sales_30d = self._coerce_int(item.get("sales_30d"), default=0)
             revenue_30d = self._coerce_float(item.get("revenue_30d"), default=price * sales_30d)
             product_url = str(item.get("product_url") or f"https://shop.tiktok.com/view/product/{pid}")
+            image_url = item.get("image_url") or item.get("cover_url") or item.get("pic_url") or item.get("image")
 
             products.append({
                 "product_id": pid,
@@ -305,6 +320,7 @@ class KalodataClient:
                 "sales_30d": sales_30d,
                 "revenue_30d": revenue_30d,
                 "product_url": product_url,
+                "image_url": str(image_url) if image_url else None,
                 "category_id": category_id,
                 "niche_id": category_id,
             })

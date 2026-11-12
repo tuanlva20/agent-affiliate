@@ -25,9 +25,11 @@ from src.agents.video_studio import VideoStudioAgent
 from src.bot.telegram_bot import TelegramCommandCenter
 from src.core.config import AppConfig, load_config
 from src.core.tone_validator import ToneValidator
-from src.database.models import Channel, Product, VideoComment, VideoJob
+from src.database.models import Channel, Competitor, Niche, Product, VideoComment, VideoJob
 from src.services.browser_adapter import BrowserAdapter, StubPage
 from src.services.comment_scanner import CommentScanner
+from src.services.kalodata_client import KalodataAuthError, KalodataClient
+from src.services.tiktok_scraper import TikTokScraper
 
 logger = logging.getLogger("amas.agents.hermes")
 
@@ -110,7 +112,16 @@ class HermesOrchestrator:
         mock_mode: bool = False,
     ) -> None:
         self.config = config or load_config()
-        self.base_scout = base_scout or BaseScoutAgent(self.config)
+        if base_scout is not None:
+            self.base_scout = base_scout
+        else:
+            kalo_client = None
+            if not mock_mode:
+                try:
+                    kalo_client = KalodataClient()
+                except KalodataAuthError:
+                    kalo_client = None
+            self.base_scout = BaseScoutAgent(self.config, kalodata_client=kalo_client)
         self.fashion_scout = fashion_scout or FashionScoutAgent(self.config)
         self.homelife_scout = homelife_scout or HomeLifeScoutAgent(self.config)
         self.video_studio = video_studio or VideoStudioAgent()
@@ -256,8 +267,8 @@ class HermesOrchestrator:
         else:
             for n in niches:
                 candidates = await self.base_scout.discover_candidates(n)
-                if not candidates:
-                    # Provide realistic fallback candidate
+                if not candidates and (self.mock_mode or state.get("run_mode") == "dry-run"):
+                    # Fallback candidate only in mock/dry-run mode
                     if n == "thoi_trang_nu":
                         candidates = [
                             ProductCandidate(
@@ -569,13 +580,22 @@ class HermesOrchestrator:
     async def _engagement_node(self, state: HermesState) -> Dict[str, Any]:
         """Node 5: Comment scanning and KOC conversion engagement."""
         logger.info("[Hermes:engagement_node] Monitoring comments and responding...")
-        pub_ids = state.get("published_videos") or ["tt_pub_dryrun_01"]
-        prod_list = state.get("approved_products") or [{
+        is_dry_or_mock = self.mock_mode or state.get("run_mode") == "dry-run"
+        pub_ids = state.get("published_videos") or (["tt_pub_dryrun_01"] if is_dry_or_mock else [])
+        prod_list = state.get("approved_products") or ([{
             "product_id": "prod_dryrun_01",
             "niche_id": "thoi_trang_nu",
             "title": "Váy maxi voan hoa nhí dáng xòe",
             "price": 199000.0,
-        }]
+        }] if is_dry_or_mock else [])
+        if not pub_ids or not prod_list:
+            return {
+                "scanned_comments": [],
+                "replies": [],
+                "replied_comments": [],
+                "current_step": "engagement",
+                "stop_reason": "completed",
+            }
         sample_prod = prod_list[0]
 
         scanned: List[Dict[str, Any]] = []
@@ -584,7 +604,7 @@ class HermesOrchestrator:
 
         for vid in pub_ids:
             comments = await self.comment_scanner.scan_comments(vid, limit=3)
-            if not comments:
+            if not comments and is_dry_or_mock:
                 comments = [
                     {
                         "comment_id": f"c_{vid}_01",
@@ -685,7 +705,7 @@ class HermesOrchestrator:
         if norm_step in ("scout", "scout_products"):
             niche = payload.get("niche_id", "thoi_trang_nu")
             candidates = await self.base_scout.discover_candidates(niche, payload.get("items"))
-            if not candidates and payload.get("items") is None:
+            if not candidates and payload.get("items") is None and self.mock_mode:
                 candidates = [
                     ProductCandidate(
                         product_id="prod_mock_01",
@@ -792,3 +812,163 @@ class HermesOrchestrator:
 
         else:
             raise ValueError(f"Unknown pipeline step: {step_name}")
+
+    async def discover_and_dispatch(
+        self,
+        niche_id: str = "thoi_trang_nu",
+        limit: int = 5,
+        save_pending: bool = True,
+        send_cards: bool = True,
+        db_session: Optional[AsyncSession] = None,
+    ) -> Dict[str, Any]:
+        """Unified discovery from Competitor channels + Kalodata, saving pending products and sending Telegram cards."""
+        session = db_session or self.db_session
+        raw_items: List[Dict[str, Any]] = []
+
+        # 1. Scan active competitor channels saved in DB (always includes source_video_url)
+        if session is not None:
+            comp_rows = (
+                await session.execute(
+                    select(Competitor).where(
+                        Competitor.niche_id == niche_id,
+                        Competitor.track_status == "active",
+                    )
+                )
+            ).scalars().all()
+            scraper = TikTokScraper(mock_mode=self.mock_mode)
+            for comp in comp_rows:
+                try:
+                    videos = await scraper.get_recent_videos(comp.profile_url, limit=5)
+                except Exception as exc:
+                    logger.warning("Competitor scan failed for %s: %s", comp.username, exc)
+                    continue
+                videos.sort(key=lambda v: (v.likes_count + v.views_count), reverse=True)
+                for vid in videos[:3]:
+                    anchor = None
+                    try:
+                        anchor = await scraper.extract_anchor_product(vid.video_url)
+                    except Exception:
+                        anchor = None
+                    pid = (anchor or {}).get("product_id") or f"comp_{vid.video_id}"
+                    title = (anchor or {}).get("title") or vid.title or f"Video hot @{comp.username}"
+                    raw_items.append({
+                        "product_id": str(pid),
+                        "niche_id": niche_id,
+                        "title": title,
+                        "price": 0.0,
+                        "commission_rate": 0.0,
+                        "product_url": (anchor or {}).get("product_url") or vid.video_url,
+                        "source_video_url": vid.video_url,
+                        "source_type": "competitor",
+                        "competitor_username": comp.username,
+                        "sales_30d": int(vid.views_count or 0),
+                    })
+
+        # 2. Fetch Kalodata candidates (or mock fallback if no client & no competitors)
+        kalo_candidates = await self.base_scout.discover_candidates(niche_id)
+        for cand in kalo_candidates:
+            d = cand.to_dict() if hasattr(cand, "to_dict") else dict(cand)
+            d.setdefault("source_type", "kalodata")
+            raw_items.append(d)
+
+        if not raw_items and self.mock_mode:
+            step_res = await self.run_pipeline_step("scout", {"niche_id": niche_id, "limit": limit})
+            for item in step_res.get("items", []):
+                item.setdefault("source_type", "fallback")
+                raw_items.append(item)
+
+        # 3. Evaluate, deduplicate, persist pending, and dispatch approval cards
+        evaluator = self.fashion_scout if "thoi_trang" in niche_id else self.homelife_scout
+        results: List[Dict[str, Any]] = []
+        saved_count = 0
+        cards_sent = 0
+        seen_ids = set()
+
+        if session is not None and save_pending:
+            if not await session.scalar(select(Niche).where(Niche.niche_id == niche_id)):
+                niche_cfg = self.config.get_niche(niche_id)
+                session.add(
+                    Niche(
+                        niche_id=niche_id,
+                        name=niche_cfg.name if niche_cfg else niche_id,
+                        description=niche_cfg.persona.role if niche_cfg else None,
+                    )
+                )
+                await session.flush()
+
+        for item in raw_items:
+            p_id = str(item.get("product_id") or "")
+            if not p_id or p_id in seen_ids:
+                continue
+            seen_ids.add(p_id)
+
+            ev = evaluator.evaluate_product(item)
+            is_competitor = item.get("source_type") == "competitor"
+            # Competitor videos are kept even if yt-dlp lacks price/commission so user can inspect source_video_url
+            if not ev.passed_filter and not is_competitor:
+                continue
+
+            ev_dict = ev.to_dict() if hasattr(ev, "to_dict") else dict(ev)
+            if item.get("source_video_url"):
+                ev_dict["source_video_url"] = item["source_video_url"]
+            if item.get("source_type"):
+                ev_dict["source_type"] = item["source_type"]
+            if item.get("image_url"):
+                ev_dict["image_url"] = item["image_url"]
+
+            is_new_saved = False
+            if session is not None and save_pending:
+                existing = await session.scalar(select(Product).where(Product.product_id == p_id))
+                if existing is None:
+                    session.add(
+                        Product(
+                            product_id=p_id,
+                            niche_id=niche_id,
+                            title=str(item.get("title", "")),
+                            price=float(item.get("price") or item.get("price_vnd") or 0.0),
+                            commission_rate=float(item.get("commission_rate") or 0.0),
+                            product_url=str(item.get("product_url") or item.get("source_video_url") or f"https://vt.tiktok.com/{p_id}"),
+                            sales_count=int(item.get("sales_30d") or item.get("sales_count") or 0),
+                            rating=float(item.get("rating") or 0.0),
+                            evaluation_data=ev_dict,
+                            status="pending",
+                        )
+                    )
+                    saved_count += 1
+                    is_new_saved = True
+
+            if send_cards and (is_new_saved or session is None):
+                try:
+                    await self.telegram_bot.send_product_card(
+                        product=item,
+                        evaluation=ev,
+                        niche_id=niche_id,
+                    )
+                    cards_sent += 1
+                except Exception as exc:
+                    logger.warning("Failed to dispatch product card %s: %s", p_id, exc)
+
+            results.append({
+                "product_id": p_id,
+                "title": item.get("title"),
+                "price": item.get("price") or item.get("price_vnd"),
+                "commission_rate": item.get("commission_rate"),
+                "source_type": item.get("source_type"),
+                "source_video_url": item.get("source_video_url"),
+                "product_url": item.get("product_url"),
+                "image_url": item.get("image_url"),
+                "evaluation": ev_dict,
+            })
+            if len(results) >= max(1, limit):
+                break
+
+        if session is not None and save_pending:
+            await session.commit()
+
+        return {
+            "niche_id": niche_id,
+            "count": len(results),
+            "saved_pending": saved_count,
+            "cards_sent": cards_sent,
+            "products": results,
+        }

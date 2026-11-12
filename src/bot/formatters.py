@@ -133,6 +133,19 @@ def format_product_card(
     pros_text = "\n".join(f"• {p}" for p in pros) if pros else "• Thiết kế chuẩn form dáng\n• Độ hoàn thiện chỉn chu"
     cons_text = "\n".join(f"• {c}" for c in cons) if cons else "• Số lượng tồn kho theo đợt có hạn"
 
+    extra_links: List[str] = []
+    if isinstance(product, dict):
+        src_vid = product.get("source_video_url") or (product.get("evaluation_data") or {}).get("source_video_url")
+        prod_url = product.get("product_url")
+    else:
+        src_vid = getattr(product, "source_video_url", None)
+        prod_url = getattr(product, "product_url", None)
+    if src_vid:
+        extra_links.append(f"🎬 Video đối thủ: {src_vid}")
+    if prod_url:
+        extra_links.append(f"🔗 Link SP: {prod_url}")
+    links_block = ("\n" + "\n".join(extra_links) + "\n") if extra_links else ""
+
     return (
         f"{header}\n"
         f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
@@ -150,6 +163,7 @@ def format_product_card(
         f"{pros_text}\n\n"
         f"⚠️ Điểm yếu / Cần lưu ý (Cons):\n"
         f"{cons_text}\n"
+        f"{links_block}"
         f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
         f"👉 Nhấn nút bên dưới để Duyệt hoặc Từ chối:"
     )

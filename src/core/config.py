@@ -131,8 +131,11 @@ class AppConfig(_E2EAppConfig):
     app_name: str = Field(default="AMAS")
     version: str = Field(default="1.4.0")
     environment: str = Field(default="development")
-    gemini_api_key: Optional[str] = Field(default=None)
-    gemini_model: str = Field(default="gemini-2.5-flash")
+    llm_provider: str = Field(default="vertex")
+    gemini_model: str = Field(default="gemini-3-flash-preview")
+    vertex_credentials_path: Optional[str] = Field(default=None)
+    vertex_project_id: Optional[str] = Field(default=None)
+    vertex_region: str = Field(default="global")
     browser: BrowserConfig = Field(default_factory=BrowserConfig)
     telegram: TelegramConfig = Field(default_factory=TelegramConfig)
     database: DatabaseConfig = Field(default_factory=DatabaseConfig)
@@ -196,14 +199,30 @@ def _apply_env_overrides(raw_data: Dict[str, Any]) -> Dict[str, Any]:
         except ValueError:
             pass
 
-    # Gemini
-    gemini_key = os.getenv("GEMINI_API_KEY")
-    if gemini_key:
-        raw_data["gemini_api_key"] = gemini_key
+    # Gemini & Vertex AI
+    llm_provider = os.getenv("LLM_PROVIDER")
+    if llm_provider:
+        raw_data["llm_provider"] = llm_provider
 
     gemini_model = os.getenv("GEMINI_MODEL")
     if gemini_model:
         raw_data["gemini_model"] = gemini_model
+
+    vertex_creds = os.getenv("VERTEX_CREDENTIALS_PATH") or os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
+    if vertex_creds:
+        raw_data["vertex_credentials_path"] = vertex_creds
+        os.environ.setdefault("GOOGLE_APPLICATION_CREDENTIALS", vertex_creds)
+        os.environ.setdefault("GOOGLE_GENAI_USE_VERTEXAI", "true")
+
+    vertex_project = os.getenv("VERTEX_PROJECT_ID")
+    if vertex_project:
+        raw_data["vertex_project_id"] = vertex_project
+        os.environ.setdefault("GOOGLE_CLOUD_PROJECT", vertex_project)
+
+    vertex_region = os.getenv("VERTEX_REGION")
+    if vertex_region:
+        raw_data["vertex_region"] = vertex_region
+        os.environ.setdefault("GOOGLE_CLOUD_LOCATION", vertex_region)
 
     # Browser
     browser_api = os.getenv("BROWSER_API_URL")

@@ -77,3 +77,6 @@ models/
 
 /docs/
 /.agent/
+.hermes/
+.env
+/tempFile

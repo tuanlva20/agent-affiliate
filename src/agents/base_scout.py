@@ -6,6 +6,7 @@ Normalizes candidate schemas and supports database persistence and autonomous sc
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import math
 from dataclasses import dataclass, field
@@ -306,22 +307,27 @@ class BaseScoutAgent:
             else:
                 categories = [niche_id]
 
+            # Query at most 2 primary categories concurrently so total runtime stays well under the 300s MCP timeout.
+            target_cats = categories[:2]
+            batches = await asyncio.gather(
+                *(self.kalodata_client.get_top_products(category_id=cat_id, limit=10) for cat_id in target_cats),
+                return_exceptions=True,
+            )
             seen_ids = set()
             candidates = []
-            for cat_id in categories:
-                try:
-                    fetched_items = await self.kalodata_client.get_top_products(category_id=cat_id, limit=10)
-                    for item in fetched_items:
-                        item_with_niche = dict(item)
-                        item_with_niche.setdefault("niche_id", niche_id)
-                        pid = str(item.get("product_id") or "")
-                        if pid in seen_ids:
-                            continue
-                        if self.filter_product(item_with_niche, niche_cfg):
-                            seen_ids.add(pid)
-                            candidates.append(ProductCandidate.from_raw_dict(item_with_niche, niche_id))
-                except Exception as exc:
-                    logger.error("Kalodata fetch error for category %s: %s", cat_id, exc)
+            for cat_id, fetched in zip(target_cats, batches):
+                if isinstance(fetched, Exception):
+                    logger.error("Kalodata fetch error for category %s: %s", cat_id, fetched)
+                    continue
+                for item in fetched:
+                    item_with_niche = dict(item)
+                    item_with_niche.setdefault("niche_id", niche_id)
+                    pid = str(item.get("product_id") or "")
+                    if pid in seen_ids:
+                        continue
+                    if self.filter_product(item_with_niche, niche_cfg):
+                        seen_ids.add(pid)
+                        candidates.append(ProductCandidate.from_raw_dict(item_with_niche, niche_id))
 
             return candidates
 

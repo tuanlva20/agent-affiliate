@@ -36,6 +36,7 @@ from src.agents.video_studio import VideoStudioAgent
 from src.bot.telegram_bot import TelegramCommandCenter
 from src.core.config import AppConfig, load_config
 from src.core.tone_validator import ToneValidator
+from src.services.kalodata_client import KalodataAuthError, KalodataClient
 
 # Augment TelegramCommandCenter with start_polling if not present
 if not hasattr(TelegramCommandCenter, "start_polling"):
@@ -224,7 +225,12 @@ async def run_scout_mode(config: AppConfig, niche: str = "all") -> int:
     print("================================================================================")
 
     target_niches = ["thoi_trang_nu", "do_gia_dung"] if niche == "all" else [niche]
-    base_scout = BaseScoutAgent(config=config)
+    kalo_client = None
+    try:
+        kalo_client = KalodataClient()
+    except KalodataAuthError:
+        kalo_client = None
+    base_scout = BaseScoutAgent(config=config, kalodata_client=kalo_client)
     fashion_scout = FashionScoutAgent(config=config)
     homelife_scout = HomeLifeScoutAgent(config=config)
 
@@ -233,8 +239,8 @@ async def run_scout_mode(config: AppConfig, niche: str = "all") -> int:
     for n in target_niches:
         print(f"\nScanning niche: {n}...")
         candidates = await base_scout.discover_candidates(niche_id=n)
-        if not candidates:
-            # Fallback realistic candidate for demonstration if Kalodata offline
+        if not candidates and bool(os.environ.get("PYTEST_CURRENT_TEST")):
+            # Fallback only during pytest runs without live Kalodata
             fallback = {
                 "product_id": f"scout_{n}_001",
                 "niche_id": n,
@@ -285,6 +291,8 @@ async def run_scout_mode(config: AppConfig, niche: str = "all") -> int:
         json.dumps(total_candidates, ensure_ascii=False, indent=2), encoding="utf-8"
     )
     print(f"Candidate summary saved to {summary_path}")
+    if kalo_client is not None:
+        await kalo_client.close()
     return 0
 
 
@@ -299,7 +307,7 @@ async def run_bot_mode(config: AppConfig, once: bool = False) -> int:
     print(f"Admin Telegram ID: {bot_center.admin_id}")
     print(f"Forum Chat ID: {bot_center.forum_chat_id}")
 
-    is_test_env = "pytest" in sys.modules or "PYTEST_CURRENT_TEST" in os.environ
+    is_test_env = bool(os.environ.get("PYTEST_CURRENT_TEST"))
     if once or bot_center.mock_mode or is_test_env:
         print("Telegram Bot initialized successfully. Mock polling complete (exit code 0).")
         return 0
@@ -308,26 +316,94 @@ async def run_bot_mode(config: AppConfig, once: bool = False) -> int:
     return 0
 
 
+async def _process_video_queue_once(config: AppConfig) -> int:
+    """Pop and process one approved job from Redis amas:video_queue if available."""
+    try:
+        import redis.asyncio as aioredis
+        from sqlalchemy import select
+        from src.database.models import Channel, Product
+        from src.database.session import get_db
+    except Exception:
+        return 0
+
+    r = aioredis.from_url(config.redis.url, socket_timeout=2.0)
+    try:
+        raw_job = await r.lpop("amas:video_queue")
+    except Exception:
+        await r.aclose()
+        return 0
+    await r.aclose()
+
+    if not raw_job:
+        return 0
+
+    job_data = json.loads(raw_job)
+    job_id = str(job_data.get("job_id") or f"job_{job_data.get('product_id')}")
+    product_id = str(job_data.get("product_id") or "")
+    niche_id = str(job_data.get("niche_id") or "thoi_trang_nu")
+    source_video_url = job_data.get("source_video_url")
+
+    db_url = os.getenv("POSTGRES_URL") or os.getenv("DATABASE_URL") or config.database.url
+    studio = VideoStudioAgent()
+    publisher = SmartPublisher(config=config)
+
+    async with get_db(db_url) as session:
+        prod = await session.scalar(select(Product).where(Product.product_id == product_id))
+        prod_meta: Dict[str, Any] = {
+            "product_id": product_id,
+            "niche_id": niche_id,
+            "title": prod.title if prod else job_data.get("title", "Sản phẩm hot"),
+            "price": prod.price if prod else 199000.0,
+            "source_video_url": source_video_url or ((prod.evaluation_data or {}).get("source_video_url") if prod else None),
+        }
+        persona = (
+            {"tone": "koc_fashion", "voice_name": "vi-VN-HoaiMyNeural"}
+            if "thoi_trang" in niche_id
+            else {"tone": "koc_homelife", "voice_name": "vi-VN-NamMinhNeural"}
+        )
+        video_path = await studio.produce_video(
+            job_id=job_id,
+            product_meta=prod_meta,
+            persona=persona,
+            source_video_url=prod_meta.get("source_video_url"),
+            db_session=session,
+        )
+        ready_chan = await session.scalar(
+            select(Channel).where(
+                Channel.niche_id == niche_id,
+                Channel.lifecycle_status == "ready_to_post",
+            )
+        )
+        if ready_chan is not None:
+            await publisher.publish_video(
+                job_id=job_id,
+                channel=ready_chan,
+                video_path=video_path,
+                caption=f"{prod_meta['title']} #affiliate #review",
+                product_anchor=prod_meta,
+                db_session=session,
+            )
+    return 1
+
+
 async def run_daemon_mode(config: AppConfig, once: bool = False) -> int:
-    """Mode 'daemon': Schedules periodic background tasks (hourly scout, batch render, publish, comments)."""
+    """Mode 'daemon': Schedules periodic background tasks (4h scout + 30s render/publish worker)."""
     print("================================================================================")
     print("⚙️ [AMAS v1.4.0] STARTING BACKGROUND DAEMON SCHEDULER")
     print("================================================================================")
 
-    async def _execute_cycle() -> None:
-        logger.info("[DAEMON] Running scheduled background cycle...")
-        print("[DAEMON] 1. Sourcing and specialist evaluating fresh products...")
-        await run_scout_mode(config, niche="all")
-        print("[DAEMON] 2. Checking rendering queue for pending video jobs...")
-        print("[DAEMON] 3. Checking ready_to_post channels for scheduled publishing...")
-        print("[DAEMON] 4. Scanning published videos for viewer comments...")
-        logger.info("[DAEMON] Scheduled cycle finished.")
-
-    is_test_env = "pytest" in sys.modules or "PYTEST_CURRENT_TEST" in os.environ
+    is_test_env = bool(os.environ.get("PYTEST_CURRENT_TEST"))
     if once or is_test_env:
-        await _execute_cycle()
+        logger.info("[DAEMON] Running single scheduled cycle...")
+        await run_scout_mode(config, niche="all")
         print("Daemon single iteration completed successfully.")
         return 0
+
+    from src.database.session import get_db
+
+    scout_interval = int(os.getenv("AMAS_SCOUT_INTERVAL_SECONDS", "14400"))  # default 4h
+    worker_interval = 30.0
+    db_url = os.getenv("POSTGRES_URL") or os.getenv("DATABASE_URL") or config.database.url
 
     stop_event = asyncio.Event()
     loop = asyncio.get_running_loop()
@@ -337,11 +413,43 @@ async def run_daemon_mode(config: AppConfig, once: bool = False) -> int:
         except (NotImplementedError, RuntimeError):
             pass
 
-    print("Daemon running indefinitely. Press Ctrl+C to terminate.")
+    print(f"Daemon running indefinitely (scout every {scout_interval}s, worker every {int(worker_interval)}s). Press Ctrl+C to terminate.")
+    last_scout_at = 0.0
     while not stop_event.is_set():
-        await _execute_cycle()
+        now = loop.time()
+        if last_scout_at == 0.0 or (now - last_scout_at) >= scout_interval:
+            orchestrator = HermesOrchestrator(config=config)
+            try:
+                async with get_db(db_url) as session:
+                    for niche_id in ("thoi_trang_nu", "do_gia_dung"):
+                        res = await orchestrator.discover_and_dispatch(
+                            niche_id=niche_id,
+                            limit=5,
+                            save_pending=True,
+                            send_cards=True,
+                            db_session=session,
+                        )
+                        logger.info(
+                            "[DAEMON] Scout %s: found=%d saved=%d cards=%d",
+                            niche_id, res["count"], res["saved_pending"], res["cards_sent"],
+                        )
+            except Exception as exc:
+                logger.warning("[DAEMON] Scout cycle error: %s", exc)
+            finally:
+                if getattr(orchestrator.base_scout, "kalodata_client", None) is not None:
+                    await orchestrator.base_scout.kalodata_client.close()
+                bot = getattr(orchestrator.telegram_bot, "bot", None)
+                if bot is not None and getattr(bot, "session", None) is not None:
+                    await bot.session.close()
+            last_scout_at = loop.time()
+
         try:
-            await asyncio.wait_for(stop_event.wait(), timeout=3600.0)
+            await _process_video_queue_once(config)
+        except Exception as exc:
+            logger.warning("[DAEMON] Video queue worker error: %s", exc)
+
+        try:
+            await asyncio.wait_for(stop_event.wait(), timeout=worker_interval)
         except asyncio.TimeoutError:
             pass
 

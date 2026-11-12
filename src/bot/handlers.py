@@ -199,6 +199,7 @@ async def execute_callback(
             product.status = "approved"
             niche_id = product.niche_id
 
+            source_video_url = (product.evaluation_data or {}).get("source_video_url")
             # Idempotency check: don't create duplicate VideoJob
             stmt_job = select(VideoJob).where(VideoJob.product_id == product_id)
             res_job = await session.execute(stmt_job)
@@ -208,18 +209,24 @@ async def execute_callback(
                     job_id=job_id,
                     product_id=product_id,
                     niche_id=niche_id,
+                    source_video_url=source_video_url,
                     status="pending",
                 )
                 session.add(new_job)
             else:
                 existing_job.status = "pending"
+                if source_video_url and not existing_job.source_video_url:
+                    existing_job.source_video_url = source_video_url
                 job_id = existing_job.job_id
             await session.commit()
+        else:
+            source_video_url = None
 
         payload = {
             "job_id": job_id,
             "product_id": product_id,
             "niche_id": niche_id,
+            "source_video_url": source_video_url,
             "status": "pending",
             "action": "produce_video",
         }

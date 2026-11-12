@@ -69,10 +69,17 @@ Key configuration parameters in `.env`:
 - `TELEGRAM_BOT_TOKEN`: Bot token from @BotFather
 - `ADMIN_TELEGRAM_ID`: Numeric Telegram user ID of the admin
 - `TELEGRAM_FORUM_CHAT_ID`: Supergroup chat ID for forum topics
-- `DATABASE_URL`: PostgreSQL connection string (`postgresql+asyncpg://...`)
+- `DATABASE_URL`: PostgreSQL connection string (`postgresql+asyncpg://postgres:postgres@localhost:5433/affiliate_db`)
 - `REDIS_URL`: Redis queue connection string (`redis://localhost:6379/0`)
 - `BROWSER_API_URL`: AliasMode Local API endpoint (`http://127.0.0.1:50325`)
-- `GEMINI_API_KEY`: Google Gemini API key for script generation
+- `VERTEX_CREDENTIALS_PATH`: Path to Google Cloud Service Account JSON for Vertex AI (`gemini-3-flash-preview`)
+
+### 3. Start PostgreSQL & Redis via Docker Compose
+Start the isolated PostgreSQL (`postgres:16-alpine` on host port `5433`) and Redis (`redis:7-alpine` on host port `6379`) containers, then initialize the database schema:
+```bash
+docker compose up -d
+python3 scripts/init_db.py
+```
 
 ---
 
@@ -130,6 +137,25 @@ Each product candidate sent to Telegram features inline buttons:
 - `/status`: Displays system health, channel lifecycle states, and active queues.
 - `/create_channel [alias]`: Registers a new channel profile.
 - `/warmup [channel_id]`: Initiates pre-posting feed warmup browsing session.
+
+---
+
+## 🧠 Agent 4 via NousResearch Hermes Agent (MCP Integration)
+
+AMAS exposes an MCP `stdio` server (`src/mcp/amas_mcp_server.py`) and an orchestration skill (`integrations/hermes/skills/amas-orchestrator/SKILL.md`) so open-source `hermes-agent` provides persistent memory (`MEMORY.md`), skill self-improvement, and natural Telegram conversation on top of the deterministic AMAS pipeline:
+
+```bash
+# 1. Register the AMAS MCP server and skill into ~/.hermes/
+python3 scripts/setup_hermes.py
+hermes mcp test amas
+
+# 2. Configure your LLM provider (e.g., Gemini) & a dedicated Telegram bot token for Hermes
+hermes model
+hermes gateway setup
+
+# 3. Start Hermes Telegram gateway (keep `main.py --mode bot` on a separate token for 1-tap cards)
+hermes gateway
+```
 
 ---
 

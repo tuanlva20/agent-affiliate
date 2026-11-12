@@ -1,6 +1,9 @@
 app_name: "AMAS"
 version: "1.4.0"
 environment: "development"
+llm_provider: "vertex"
+gemini_model: "gemini-3-flash-preview"
+vertex_region: "global"
 
 # ==============================================================================
 # CẤU HÌNH TRÌNH DUYỆT ẨN DANH (ALIASMODE) & BIOMETRICS ENGINE
@@ -30,7 +33,7 @@ telegram:
   admin_id: 0   # Ghi đè bởi biến môi trường ADMIN_TELEGRAM_ID
   forum_chat_id: null # Ghi đè bởi biến môi trường TELEGRAM_FORUM_CHAT_ID
   topic_ids:
-    thoi_trang_nu: 2 # Message thread ID cho topic Thời trang nữ
+    thoi_trang_nu: 3 # Message thread ID cho topic Thời trang nữ
     do_gia_dung: 4   # Message thread ID cho topic Đồ gia dụng
     dashboard: 1     # Message thread ID cho topic Tổng quan
 
@@ -38,7 +41,7 @@ telegram:
 # CẤU HÌNH DATABASE & REDIS
 # ==============================================================================
 database:
-  url: "postgresql+asyncpg://postgres:postgres@localhost:5432/affiliate_db"
+  url: "postgresql+asyncpg://postgres:postgres@localhost:5433/affiliate_db"
   pool_size: 10
   max_overflow: 20
   echo: false
@@ -52,7 +55,7 @@ redis:
 niches:
   - niche_id: "thoi_trang_nu"
     name: "Thời trang nữ"
-    telegram_topic_id: 2
+    telegram_topic_id: 3
     categories:
       - "women_clothing"
       - "vay_dam"

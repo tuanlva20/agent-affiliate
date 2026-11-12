@@ -36,7 +36,7 @@ def test_load_config_niches_and_browser():
     # Kiểm tra chi tiết ngách Thời trang nữ
     fashion = config.get_niche("thoi_trang_nu")
     assert fashion is not None
-    assert fashion.telegram_topic_id == 2
+    assert fashion.telegram_topic_id == 3
     assert fashion.thresholds.min_price == 99000.0
     assert fashion.thresholds.min_commission_rate == 0.10
     assert len(fashion.persona.sample_greetings) > 0
@@ -75,7 +75,9 @@ niches:
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "mock_bot_token_123")
     monkeypatch.setenv("ADMIN_TELEGRAM_ID", "987654321")
     monkeypatch.setenv("TELEGRAM_FORUM_CHAT_ID", "-1009876543210")
-    monkeypatch.setenv("GEMINI_API_KEY", "mock_gemini_key_456")
+    monkeypatch.setenv("VERTEX_CREDENTIALS_PATH", "/tmp/vertex-sa.json")
+    monkeypatch.setenv("VERTEX_PROJECT_ID", "amas-gcp-proj")
+    monkeypatch.setenv("VERTEX_REGION", "global")
     monkeypatch.setenv("BROWSER_API_URL", "http://aliasmode-host:50325")
     monkeypatch.setenv("ENVIRONMENT", "staging")
 
@@ -86,7 +88,10 @@ niches:
     assert config.telegram.bot_token == "mock_bot_token_123"
     assert config.telegram.admin_id == 987654321
     assert config.telegram.forum_chat_id == -1009876543210
-    assert config.gemini_api_key == "mock_gemini_key_456"
+    assert config.llm_provider == "vertex"
+    assert config.vertex_credentials_path == "/tmp/vertex-sa.json"
+    assert config.vertex_project_id == "amas-gcp-proj"
+    assert config.vertex_region == "global"
     assert config.browser.api_url == "http://aliasmode-host:50325"
     assert config.environment == "staging"
 
