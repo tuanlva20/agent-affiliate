@@ -25,9 +25,15 @@ interface Segment {
   script: string;
 }
 
-export const MotionStudio: React.FC = () => {
+interface MotionStudioProps {
+  initialVideoUrl?: string;
+}
+
+export const MotionStudio: React.FC<MotionStudioProps> = ({ initialVideoUrl }) => {
   // Input states
-  const [videoUrl, setVideoUrl] = useState("https://www.tiktok.com/@fashion_trend/video/73912345678");
+  const [videoUrl, setVideoUrl] = useState(
+    initialVideoUrl || "https://www.tiktok.com/@fashion_trend/video/73912345678"
+  );
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [activeSegmentIndex, setActiveSegmentIndex] = useState(0);
 
