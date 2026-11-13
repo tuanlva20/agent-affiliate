@@ -8,6 +8,10 @@ from src.database.models import (
     VideoJob,
     VideoComment,
     Metric,
+    Project,
+    ProjectGroup,
+    GroupCommentLog,
+    PublishSchedule,
 )
 from src.database.session import get_async_engine, get_session_factory, get_db
 
@@ -20,7 +24,12 @@ __all__ = [
     "VideoJob",
     "VideoComment",
     "Metric",
+    "Project",
+    "ProjectGroup",
+    "GroupCommentLog",
+    "PublishSchedule",
     "get_async_engine",
     "get_session_factory",
     "get_db",
 ]
+

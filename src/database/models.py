@@ -6,6 +6,7 @@ SQLAlchemy 2.0 DeclarativeBase models with PostgreSQL JSONB and SQLite compatibi
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 from sqlalchemy import (
+    Boolean,
     CheckConstraint,
     DateTime,
     Float,
@@ -14,11 +15,12 @@ from sqlalchemy import (
     JSON,
     String,
     Text,
+    UniqueConstraint,
     func,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.compiler import compiles
-from sqlalchemy.ext.mutable import MutableDict
+from sqlalchemy.ext.mutable import MutableDict, MutableList
 from sqlalchemy.orm import (
     DeclarativeBase,
     Mapped,
@@ -35,13 +37,33 @@ def _compile_jsonb_sqlite(type_, compiler, **kw):
     return "JSON"
 
 
-# Dual-dialect column type alias wrapped with MutableDict for in-place mutation tracking
+# Dual-dialect column type alias wrapped with MutableDict/MutableList for in-place mutation tracking
 JSONType = MutableDict.as_mutable(JSONB().with_variant(JSON(), "sqlite"))
+JSONListType = MutableList.as_mutable(JSONB().with_variant(JSON(), "sqlite"))
+
 
 
 class Base(DeclarativeBase):
     """Base class for all SQLAlchemy 2.0 declarative models."""
     pass
+
+
+class Project(Base):
+    """Google Cloud Console style Multi-Project Workspace partition."""
+    __tablename__ = "projects"
+
+    project_id: Mapped[str] = mapped_column(String(50), primary_key=True)
+    name: Mapped[str] = mapped_column(String(150), nullable=False)
+    niche_brief: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    target_audience: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    tone_of_voice: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    trigger_keywords: Mapped[Optional[List[str]]] = mapped_column(JSONListType, nullable=True)
+    negative_keywords: Mapped[Optional[List[str]]] = mapped_column(JSONListType, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        default=lambda: datetime.now(timezone.utc),
+    )
 
 
 class Niche(Base):
@@ -85,6 +107,9 @@ class Channel(Base):
     VALID_LIFECYCLE_STATUSES = {"warming", "ready_to_post", "cooldown", "captcha_blocked"}
 
     channel_id: Mapped[str] = mapped_column(String(50), primary_key=True)
+    project_id: Mapped[Optional[str]] = mapped_column(
+        String(50), ForeignKey("projects.project_id", ondelete="SET NULL"), nullable=True
+    )
     niche_id: Mapped[str] = mapped_column(
         String(50), ForeignKey("niches.niche_id", ondelete="CASCADE"), nullable=False
     )
@@ -146,8 +171,14 @@ class Channel(Base):
 class Competitor(Base):
     """Competitor channel monitored for viral content discovery."""
     __tablename__ = "competitors"
+    __table_args__ = (
+        CheckConstraint("scrape_interval_hours >= 2", name="chk_competitor_scrape_interval_hours"),
+    )
 
     competitor_id: Mapped[str] = mapped_column(String(50), primary_key=True)
+    project_id: Mapped[Optional[str]] = mapped_column(
+        String(50), ForeignKey("projects.project_id", ondelete="SET NULL"), nullable=True
+    )
     niche_id: Mapped[str] = mapped_column(
         String(50), ForeignKey("niches.niche_id", ondelete="CASCADE"), nullable=False
     )
@@ -155,6 +186,12 @@ class Competitor(Base):
     profile_url: Mapped[str] = mapped_column(String(500), nullable=False)
     followers_count: Mapped[int] = mapped_column(
         Integer, default=0, server_default="0"
+    )
+    platform: Mapped[str] = mapped_column(
+        String(30), default="tiktok", server_default="tiktok"
+    )
+    scrape_interval_hours: Mapped[int] = mapped_column(
+        Integer, default=4, server_default="4"
     )
     track_status: Mapped[str] = mapped_column(
         String(30), default="active", server_default="active"
@@ -214,6 +251,9 @@ class VideoJob(Base):
     __tablename__ = "video_jobs"
 
     job_id: Mapped[str] = mapped_column(String(50), primary_key=True)
+    project_id: Mapped[Optional[str]] = mapped_column(
+        String(50), ForeignKey("projects.project_id", ondelete="SET NULL"), nullable=True
+    )
     product_id: Mapped[str] = mapped_column(
         String(50), ForeignKey("products.product_id", ondelete="CASCADE"), nullable=False
     )
@@ -379,6 +419,9 @@ class PublishLog(Base):
     __tablename__ = "publish_logs"
 
     log_id: Mapped[str] = mapped_column(String(50), primary_key=True)
+    project_id: Mapped[Optional[str]] = mapped_column(
+        String(50), ForeignKey("projects.project_id", ondelete="SET NULL"), nullable=True
+    )
     job_id: Mapped[str] = mapped_column(String(50), ForeignKey("video_jobs.job_id", ondelete="CASCADE"), nullable=False)
     channel_id: Mapped[str] = mapped_column(String(50), ForeignKey("channels.channel_id", ondelete="CASCADE"), nullable=False)
     platform: Mapped[str] = mapped_column(String(30), default="tiktok", server_default="tiktok")
@@ -415,7 +458,11 @@ class CompetitorVideo(Base):
     __tablename__ = "competitor_videos"
 
     video_id: Mapped[str] = mapped_column(String(100), primary_key=True)
+    project_id: Mapped[Optional[str]] = mapped_column(
+        String(50), ForeignKey("projects.project_id", ondelete="SET NULL"), nullable=True
+    )
     competitor_id: Mapped[str] = mapped_column(String(50), ForeignKey("competitors.competitor_id", ondelete="CASCADE"), nullable=False)
+    platform: Mapped[str] = mapped_column(String(30), default="tiktok", server_default="tiktok")
     video_url: Mapped[str] = mapped_column(String(1000), nullable=False)
     caption: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     views_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
@@ -426,4 +473,99 @@ class CompetitorVideo(Base):
         server_default=func.now(),
         default=lambda: datetime.now(timezone.utc),
     )
+
+
+class ProjectGroup(Base):
+    """Facebook Group managed within a Project workspace."""
+    __tablename__ = "project_groups"
+    __table_args__ = (
+        CheckConstraint("privacy IN ('public', 'private')", name="chk_project_group_privacy"),
+    )
+
+    group_id: Mapped[str] = mapped_column(String(50), primary_key=True)
+    project_id: Mapped[str] = mapped_column(
+        String(50), ForeignKey("projects.project_id", ondelete="CASCADE"), nullable=False
+    )
+    group_url: Mapped[str] = mapped_column(String(500), nullable=False)
+    group_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    privacy: Mapped[str] = mapped_column(String(20), default="public", server_default="public")
+    approval_mode: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+    last_scanned_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        default=lambda: datetime.now(timezone.utc),
+    )
+
+
+class GroupCommentLog(Base):
+    """Marketing and interaction log for comments in monitored groups."""
+    __tablename__ = "group_comment_logs"
+    __table_args__ = (
+        UniqueConstraint("group_id", "post_id", name="uq_group_comment_log_group_post"),
+    )
+
+    log_id: Mapped[str] = mapped_column(String(50), primary_key=True)
+    group_id: Mapped[str] = mapped_column(
+        String(50), ForeignKey("project_groups.group_id", ondelete="CASCADE"), nullable=False
+    )
+    project_id: Mapped[Optional[str]] = mapped_column(
+        String(50), ForeignKey("projects.project_id", ondelete="CASCADE"), nullable=True
+    )
+    post_id: Mapped[str] = mapped_column(String(150), nullable=False)
+    post_content: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    matched_keyword: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    comment_text: Mapped[str] = mapped_column(Text, nullable=False)
+    channel_id: Mapped[Optional[str]] = mapped_column(
+        String(50), ForeignKey("channels.channel_id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        default=lambda: datetime.now(timezone.utc),
+    )
+
+
+class PublishSchedule(Base):
+    """Multi-platform content calendar publishing schedule."""
+    __tablename__ = "publish_schedules"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('scheduled', 'publishing', 'published', 'failed')",
+            name="chk_publish_schedule_status",
+        ),
+        CheckConstraint(
+            "platform IN ('tiktok', 'facebook', 'instagram')",
+            name="chk_publish_schedule_platform",
+        ),
+        CheckConstraint(
+            "target_type IN ('reel', 'post', 'group')",
+            name="chk_publish_schedule_target_type",
+        ),
+    )
+
+    schedule_id: Mapped[str] = mapped_column(String(50), primary_key=True)
+    project_id: Mapped[Optional[str]] = mapped_column(
+        String(50), ForeignKey("projects.project_id", ondelete="CASCADE"), nullable=True
+    )
+    channel_id: Mapped[str] = mapped_column(
+        String(50), ForeignKey("channels.channel_id", ondelete="CASCADE"), nullable=False
+    )
+    job_id: Mapped[Optional[str]] = mapped_column(
+        String(50), ForeignKey("video_jobs.job_id", ondelete="SET NULL"), nullable=True
+    )
+    platform: Mapped[str] = mapped_column(String(30), default="tiktok", server_default="tiktok")
+    target_type: Mapped[str] = mapped_column(String(30), default="reel", server_default="reel")
+    target_url: Mapped[Optional[str]] = mapped_column(String(1000), nullable=True)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    caption: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    scheduled_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    status: Mapped[str] = mapped_column(String(30), default="scheduled", server_default="scheduled")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        default=lambda: datetime.now(timezone.utc),
+    )
+
 
