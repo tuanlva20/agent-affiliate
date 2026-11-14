@@ -21,6 +21,7 @@ router = APIRouter(prefix="/api/channels", tags=["Channels"])
 
 class CreateChannelRequest(BaseModel):
     channel_id: Optional[str] = None
+    project_id: Optional[str] = None
     niche_id: str
     platform: str = Field("tiktok", description="tiktok or facebook")
     account_type: str = Field("profile", description="profile or fanpage")
@@ -47,17 +48,21 @@ class PublishRequest(BaseModel):
 @router.get("/")
 async def list_channels(
     platform: Optional[str] = None,
+    project_id: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
 ):
-    """Lists channels, optionally filtered by platform."""
+    """Lists channels, optionally filtered by platform and project_id."""
     stmt = select(Channel)
     if platform:
         stmt = stmt.where(Channel.platform == platform)
+    if project_id:
+        stmt = stmt.where(Channel.project_id == project_id)
     res = await db.execute(stmt)
     channels = res.scalars().all()
     return [
         {
             "channel_id": c.channel_id,
+            "project_id": c.project_id,
             "niche_id": c.niche_id,
             "platform": c.platform,
             "account_type": c.account_type,
@@ -81,6 +86,7 @@ async def create_channel(
     chan_id = req.channel_id or f"chan_{uuid.uuid4().hex[:8]}"
     channel = Channel(
         channel_id=chan_id,
+        project_id=req.project_id,
         niche_id=req.niche_id,
         platform=req.platform,
         account_type=req.account_type,

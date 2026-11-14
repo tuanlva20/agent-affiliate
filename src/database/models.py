@@ -549,8 +549,8 @@ class PublishSchedule(Base):
     project_id: Mapped[Optional[str]] = mapped_column(
         String(50), ForeignKey("projects.project_id", ondelete="CASCADE"), nullable=True
     )
-    channel_id: Mapped[str] = mapped_column(
-        String(50), ForeignKey("channels.channel_id", ondelete="CASCADE"), nullable=False
+    channel_id: Mapped[Optional[str]] = mapped_column(
+        String(50), ForeignKey("channels.channel_id", ondelete="CASCADE"), nullable=True
     )
     job_id: Mapped[Optional[str]] = mapped_column(
         String(50), ForeignKey("video_jobs.job_id", ondelete="SET NULL"), nullable=True
