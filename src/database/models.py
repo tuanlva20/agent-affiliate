@@ -59,6 +59,7 @@ class Project(Base):
     tone_of_voice: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     trigger_keywords: Mapped[Optional[List[str]]] = mapped_column(JSONListType, nullable=True)
     negative_keywords: Mapped[Optional[List[str]]] = mapped_column(JSONListType, nullable=True)
+    website_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
@@ -567,5 +568,47 @@ class PublishSchedule(Base):
         server_default=func.now(),
         default=lambda: datetime.now(timezone.utc),
     )
+
+
+class SEOAuditReport(Base):
+    """OpenSEO automated site audit and Lighthouse health report."""
+    __tablename__ = "seo_audit_reports"
+
+    report_id: Mapped[str] = mapped_column(String(50), primary_key=True)
+    project_id: Mapped[str] = mapped_column(
+        String(50), ForeignKey("projects.project_id", ondelete="CASCADE"), nullable=False
+    )
+    website_url: Mapped[str] = mapped_column(String(500), nullable=False)
+    health_score: Mapped[int] = mapped_column(Integer, default=85)
+    errors_count: Mapped[int] = mapped_column(Integer, default=0)
+    warnings_count: Mapped[int] = mapped_column(Integer, default=0)
+    notices_count: Mapped[int] = mapped_column(Integer, default=0)
+    audit_data: Mapped[Dict[str, Any]] = mapped_column(JSONType, default=dict)
+    scanned_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        default=lambda: datetime.now(timezone.utc),
+    )
+
+
+class SEOSavedKeyword(Base):
+    """OpenSEO saved target keywords."""
+    __tablename__ = "seo_saved_keywords"
+
+    saved_id: Mapped[str] = mapped_column(String(50), primary_key=True)
+    project_id: Mapped[str] = mapped_column(
+        String(50), ForeignKey("projects.project_id", ondelete="CASCADE"), nullable=False
+    )
+    keyword: Mapped[str] = mapped_column(String(200), nullable=False)
+    search_volume: Mapped[int] = mapped_column(Integer, default=0)
+    keyword_difficulty: Mapped[int] = mapped_column(Integer, default=0)
+    cpc: Mapped[float] = mapped_column(Float, default=0.0)
+    intent: Mapped[str] = mapped_column(String(50), default="Commercial")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        default=lambda: datetime.now(timezone.utc),
+    )
+
 
 

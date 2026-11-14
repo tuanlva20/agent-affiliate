@@ -7,6 +7,7 @@ from src.api.calendar import router as calendar_router
 from src.api.channels import router as channels_router
 from src.api.groups import router as groups_router
 from src.api.history import router as history_router
+from src.api.openseo import router as openseo_router
 from src.api.projects import router as projects_router
 from src.api.proxies import router as proxies_router
 from src.api.studio import router as studio_router
@@ -34,6 +35,7 @@ app.include_router(history_router)
 app.include_router(projects_router)
 app.include_router(calendar_router)
 app.include_router(groups_router)
+app.include_router(openseo_router)
 
 
 @app.get("/health", tags=["Health"])
