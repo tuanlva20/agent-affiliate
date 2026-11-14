@@ -5,10 +5,12 @@ import { Header } from "@/components/Header";
 import { MotionStudio } from "@/components/MotionStudio";
 import { ChannelsManager } from "@/components/ChannelsManager";
 import { HistoryHub } from "@/components/HistoryHub";
+import { ProjectProvider, useProject } from "@/context/ProjectContext";
 
-export default function Home() {
-  const [activeTab, setActiveTab] = useState<"studio" | "channels" | "history">("studio");
+function MainContent() {
+  const [activeTab, setActiveTab] = useState<"studio" | "channels" | "history" | "calendar" | "seeding" | "openseo">("studio");
   const [selectedReferenceUrl, setSelectedReferenceUrl] = useState<string | null>(null);
+  const { activeProject } = useProject();
 
   const handleSelectMotionReference = (videoUrl: string) => {
     setSelectedReferenceUrl(videoUrl);
@@ -21,13 +23,29 @@ export default function Home() {
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {activeTab === "studio" && (
-          <MotionStudio initialVideoUrl={selectedReferenceUrl || undefined} />
+          <MotionStudio
+            key={activeProject?.project_id}
+            initialVideoUrl={selectedReferenceUrl || undefined}
+          />
         )}
-        {activeTab === "channels" && <ChannelsManager />}
+        {activeTab === "channels" && (
+          <ChannelsManager key={activeProject?.project_id} />
+        )}
         {activeTab === "history" && (
-          <HistoryHub onSelectMotionReference={handleSelectMotionReference} />
+          <HistoryHub
+            key={activeProject?.project_id}
+            onSelectMotionReference={handleSelectMotionReference}
+          />
         )}
       </main>
     </div>
+  );
+}
+
+export default function Home() {
+  return (
+    <ProjectProvider>
+      <MainContent />
+    </ProjectProvider>
   );
 }
