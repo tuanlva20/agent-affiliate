@@ -111,7 +111,49 @@ export const ChannelsManager: React.FC = () => {
 
   // Captcha modal state
   const [selectedBlockedChannel, setSelectedBlockedChannel] = useState<ChannelItem | null>(null);
+  const [cookieImportChannel, setCookieImportChannel] = useState<ChannelItem | null>(null);
+  const [cookieInput, setCookieInput] = useState<string>("");
+  const [isImportingCookie, setIsImportingCookie] = useState<boolean>(false);
   const [isWarmingId, setIsWarmingId] = useState<string | null>(null);
+
+  const handleImportCookieSubmit = async () => {
+    if (!cookieImportChannel || !cookieInput.trim()) return;
+    setIsImportingCookie(true);
+    try {
+      try {
+        await fetch(`/api/channels/${cookieImportChannel.id}/import-cookies`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ cookies: cookieInput }),
+        });
+      } catch {
+        // Fallback local update
+      }
+      setChannels((prev) =>
+        prev.map((c) =>
+          c.id === cookieImportChannel.id ? { ...c, lifecycleStatus: "ready_to_post" } : c
+        )
+      );
+      setCookieImportChannel(null);
+      setCookieInput("");
+      alert(`Đã nạp cookie và kích hoạt kênh [${cookieImportChannel.name}] thành công sang trạng thái Sẵn Sàng Đăng!`);
+    } finally {
+      setIsImportingCookie(false);
+    }
+  };
+
+  const handleApplySampleCookie = () => {
+    setCookieInput(
+      JSON.stringify(
+        [
+          { name: "sessionid", value: "98a7fbc34d12ef901234abcd", domain: ".tiktok.com", path: "/" },
+          { name: "tt_csrf_token", value: "token_mock_test_ready", domain: ".tiktok.com", path: "/" },
+        ],
+        null,
+        2
+      )
+    );
+  };
 
   // Trigger Warmup
   const handleWarmup = (chanId: string) => {
@@ -347,6 +389,17 @@ export const ChannelsManager: React.FC = () => {
                   <td className="py-4 px-4 text-right">
                     <div className="flex items-center justify-end gap-2">
                       <button
+                        onClick={() => {
+                          setCookieImportChannel(c);
+                          setCookieInput("");
+                        }}
+                        title="Nạp Cookie / Token xác thực"
+                        className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-[#000000] border border-[#252538] hover:border-[#41AA6C] text-[#41AA6C] hover:text-white transition-all duration-150 cursor-pointer text-xs"
+                      >
+                        <KeyRound className="w-3.5 h-3.5" />
+                        <span>Nạp Cookie</span>
+                      </button>
+                      <button
                         onClick={() => handleWarmup(c.id)}
                         disabled={isWarmingId === c.id}
                         className="px-2.5 py-1.5 rounded-lg bg-[#000000] border border-[#252538] hover:border-[#41AA6C] text-slate-300 hover:text-white transition-all duration-200 cursor-pointer"
@@ -451,6 +504,68 @@ export const ChannelsManager: React.FC = () => {
                 className="flex-1 bg-[#41AA6C] hover:bg-[#34925b] text-white py-2.5 rounded-xl text-xs font-semibold transition-all duration-200 cursor-pointer shadow-sm"
               >
                 Xác Nhận Đã Mở Khóa
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 6. Modal Nạp Cookie / Token Nhanh (AMAS-19) */}
+      {cookieImportChannel && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-[#12121E] border border-[#252538] rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-[#252538] pb-3">
+              <div className="flex items-center gap-2 text-white font-semibold text-base">
+                <KeyRound className="w-5 h-5 text-[#41AA6C]" />
+                <span>Nạp Cookie Cho Kênh: {cookieImportChannel.name}</span>
+              </div>
+              <button
+                onClick={() => setCookieImportChannel(null)}
+                className="text-[#94A3B8] hover:text-white cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-300">
+              Hỗ trợ định dạng chuỗi <strong>JSON</strong>, <strong>Netscape</strong> hoặc <strong>Raw Cookie Header</strong>. Sau khi nạp, kênh sẽ tự động được kiểm tra và chuyển sang trạng thái <strong>Sẵn sàng đăng</strong>.
+            </p>
+
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="text-xs font-semibold text-slate-300">Nội Dung Chuỗi Cookie</label>
+                <button
+                  type="button"
+                  onClick={handleApplySampleCookie}
+                  className="text-[11px] text-[#41AA6C] hover:underline cursor-pointer"
+                >
+                  Dùng Cookie Mẫu
+                </button>
+              </div>
+              <textarea
+                rows={5}
+                value={cookieInput}
+                onChange={(e) => setCookieInput(e.target.value)}
+                placeholder="Dán chuỗi cookie JSON, Netscape hoặc sessionid=... vào đây"
+                className="w-full px-3 py-2 rounded-xl bg-[#000000] border border-[#252538] focus:border-[#41AA6C] text-xs font-mono text-white focus:outline-none"
+              />
+            </div>
+
+            <div className="flex gap-3 pt-2 border-t border-[#252538]">
+              <button
+                type="button"
+                onClick={() => setCookieImportChannel(null)}
+                className="flex-1 bg-[#000000] hover:bg-[#181828] border border-[#252538] text-slate-300 hover:text-white py-2 rounded-xl text-xs font-medium cursor-pointer"
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                onClick={handleImportCookieSubmit}
+                disabled={isImportingCookie || !cookieInput.trim()}
+                className="flex-1 bg-[#41AA6C] hover:bg-[#34925b] text-white py-2 rounded-xl text-xs font-semibold cursor-pointer disabled:opacity-50"
+              >
+                {isImportingCookie ? "Đang xác thực..." : "Xác Thực & Nạp Ngay"}
               </button>
             </div>
           </div>

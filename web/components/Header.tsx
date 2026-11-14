@@ -1,12 +1,14 @@
 "use client";
 
 import React from "react";
-import { Clapperboard, Share2, History, Radio, Sparkles } from "lucide-react";
+import { Clapperboard, Share2, History, Radio, Sparkles, Calendar, Users, Globe } from "lucide-react";
 import { ProjectSwitcher } from "./ProjectSwitcher";
 
+export type NavTabType = "studio" | "channels" | "history" | "calendar" | "seeding" | "openseo";
+
 interface HeaderProps {
-  activeTab: "studio" | "channels" | "history" | "calendar" | "seeding" | "openseo";
-  setActiveTab: (tab: "studio" | "channels" | "history" | "calendar" | "seeding" | "openseo") => void;
+  activeTab: NavTabType;
+  setActiveTab: (tab: NavTabType) => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({ activeTab, setActiveTab }) => {
@@ -36,42 +38,78 @@ export const Header: React.FC<HeaderProps> = ({ activeTab, setActiveTab }) => {
           </div>
         </div>
 
-        {/* Navigation Tabs */}
+        {/* Navigation Tabs (5 core tabs + OpenSEO readiness) */}
         <nav className="flex items-center gap-1 bg-[#12121E] p-1 rounded-xl border border-[#252538] overflow-x-auto">
           <button
             onClick={() => setActiveTab("studio")}
-            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all duration-200 cursor-pointer shrink-0 ${
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 cursor-pointer shrink-0 ${
               activeTab === "studio"
                 ? "bg-[#41AA6C] text-white shadow-sm"
                 : "text-[#94A3B8] hover:text-white hover:bg-white/5"
             }`}
           >
-            <Clapperboard className="w-4 h-4" />
+            <Clapperboard className="w-3.5 h-3.5" />
             <span>Motion Studio</span>
           </button>
 
           <button
             onClick={() => setActiveTab("channels")}
-            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all duration-200 cursor-pointer shrink-0 ${
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 cursor-pointer shrink-0 ${
               activeTab === "channels"
                 ? "bg-[#41AA6C] text-white shadow-sm"
                 : "text-[#94A3B8] hover:text-white hover:bg-white/5"
             }`}
           >
-            <Share2 className="w-4 h-4" />
+            <Share2 className="w-3.5 h-3.5" />
             <span>Kênh & Proxy</span>
           </button>
 
           <button
             onClick={() => setActiveTab("history")}
-            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all duration-200 cursor-pointer shrink-0 ${
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 cursor-pointer shrink-0 ${
               activeTab === "history"
                 ? "bg-[#41AA6C] text-white shadow-sm"
                 : "text-[#94A3B8] hover:text-white hover:bg-white/5"
             }`}
           >
-            <History className="w-4 h-4" />
-            <span>Lịch sử & Đối thủ</span>
+            <History className="w-3.5 h-3.5" />
+            <span>Lịch Sử & Đối Thủ</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab("calendar")}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 cursor-pointer shrink-0 ${
+              activeTab === "calendar"
+                ? "bg-[#41AA6C] text-white shadow-sm"
+                : "text-[#94A3B8] hover:text-white hover:bg-white/5"
+            }`}
+          >
+            <Calendar className="w-3.5 h-3.5" />
+            <span>Lịch Đăng Bài</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab("seeding")}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 cursor-pointer shrink-0 ${
+              activeTab === "seeding"
+                ? "bg-[#41AA6C] text-white shadow-sm"
+                : "text-[#94A3B8] hover:text-white hover:bg-white/5"
+            }`}
+          >
+            <Users className="w-3.5 h-3.5" />
+            <span>Group Seeding</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab("openseo")}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 cursor-pointer shrink-0 ${
+              activeTab === "openseo"
+                ? "bg-[#41AA6C] text-white shadow-sm"
+                : "text-[#94A3B8] hover:text-white hover:bg-white/5"
+            }`}
+          >
+            <Globe className="w-3.5 h-3.5" />
+            <span>SEO Website</span>
           </button>
         </nav>
 

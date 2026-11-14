@@ -1,14 +1,16 @@
 "use client";
 
 import React, { useState } from "react";
-import { Header } from "@/components/Header";
+import { Header, NavTabType } from "@/components/Header";
 import { MotionStudio } from "@/components/MotionStudio";
 import { ChannelsManager } from "@/components/ChannelsManager";
 import { HistoryHub } from "@/components/HistoryHub";
+import { ContentCalendarTab } from "@/components/ContentCalendarTab";
+import { GroupSeedingTab } from "@/components/GroupSeedingTab";
 import { ProjectProvider, useProject } from "@/context/ProjectContext";
 
 function MainContent() {
-  const [activeTab, setActiveTab] = useState<"studio" | "channels" | "history" | "calendar" | "seeding" | "openseo">("studio");
+  const [activeTab, setActiveTab] = useState<NavTabType>("studio");
   const [selectedReferenceUrl, setSelectedReferenceUrl] = useState<string | null>(null);
   const { activeProject } = useProject();
 
@@ -36,6 +38,18 @@ function MainContent() {
             key={activeProject?.project_id}
             onSelectMotionReference={handleSelectMotionReference}
           />
+        )}
+        {activeTab === "calendar" && (
+          <ContentCalendarTab key={activeProject?.project_id} />
+        )}
+        {activeTab === "seeding" && (
+          <GroupSeedingTab key={activeProject?.project_id} />
+        )}
+        {activeTab === "openseo" && (
+          <div className="p-8 text-center bg-[#12121E] border border-[#252538] rounded-2xl">
+            <h3 className="text-base font-bold text-white mb-2">OpenSEO Suite</h3>
+            <p className="text-xs text-[#94A3B8]">Phân hệ SEO Website 17 màn hình (Phase 7.2) đang sẵn sàng kết nối.</p>
+          </div>
         )}
       </main>
     </div>
