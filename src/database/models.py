@@ -422,7 +422,7 @@ class PublishLog(Base):
     project_id: Mapped[Optional[str]] = mapped_column(
         String(50), ForeignKey("projects.project_id", ondelete="SET NULL"), nullable=True
     )
-    job_id: Mapped[str] = mapped_column(String(50), ForeignKey("video_jobs.job_id", ondelete="CASCADE"), nullable=False)
+    job_id: Mapped[Optional[str]] = mapped_column(String(50), ForeignKey("video_jobs.job_id", ondelete="CASCADE"), nullable=True)
     channel_id: Mapped[str] = mapped_column(String(50), ForeignKey("channels.channel_id", ondelete="CASCADE"), nullable=False)
     platform: Mapped[str] = mapped_column(String(30), default="tiktok", server_default="tiktok")
     published_video_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
