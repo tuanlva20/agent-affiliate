@@ -114,6 +114,28 @@ async def init_database(
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
 
+            # Idempotent column migrations for AMAS v1.5.0 Workspace Expansion
+            if "postgresql" in target_url:
+                from sqlalchemy import text
+                migrations = [
+                    "ALTER TABLE competitors ADD COLUMN IF NOT EXISTS project_id VARCHAR(50) REFERENCES projects(project_id) ON DELETE SET NULL;",
+                    "ALTER TABLE competitors ADD COLUMN IF NOT EXISTS platform VARCHAR(30) DEFAULT 'tiktok';",
+                    "ALTER TABLE competitors ADD COLUMN IF NOT EXISTS scrape_interval_hours INTEGER DEFAULT 4;",
+                    "ALTER TABLE channels ADD COLUMN IF NOT EXISTS project_id VARCHAR(50) REFERENCES projects(project_id) ON DELETE SET NULL;",
+                    "ALTER TABLE channels ADD COLUMN IF NOT EXISTS platform VARCHAR(30) DEFAULT 'tiktok';",
+                    "ALTER TABLE channels ADD COLUMN IF NOT EXISTS account_type VARCHAR(30) DEFAULT 'profile';",
+                    "ALTER TABLE channels ADD COLUMN IF NOT EXISTS platform_metadata JSONB;",
+                    "ALTER TABLE video_jobs ADD COLUMN IF NOT EXISTS project_id VARCHAR(50) REFERENCES projects(project_id) ON DELETE SET NULL;",
+                    "ALTER TABLE video_jobs ADD COLUMN IF NOT EXISTS motion_mode VARCHAR(50) DEFAULT 'replicate_motion_control';",
+                    "ALTER TABLE video_jobs ADD COLUMN IF NOT EXISTS character_image_url VARCHAR(1000);",
+                    "ALTER TABLE video_jobs ADD COLUMN IF NOT EXISTS product_image_url VARCHAR(1000);",
+                    "ALTER TABLE video_jobs ADD COLUMN IF NOT EXISTS segments_data JSONB;",
+                    "ALTER TABLE publish_logs ADD COLUMN IF NOT EXISTS project_id VARCHAR(50) REFERENCES projects(project_id) ON DELETE SET NULL;",
+                    "ALTER TABLE projects ADD COLUMN IF NOT EXISTS website_url VARCHAR(500);",
+                ]
+                for stmt in migrations:
+                    await conn.execute(text(stmt))
+
         if seed_niches and config.niches:
             session_factory = get_session_factory(target_url)
             async with session_factory() as session:

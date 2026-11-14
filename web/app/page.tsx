@@ -24,7 +24,7 @@ function MainContent() {
     <div className="min-h-screen bg-[#000000] text-[#F8FAFC]">
       <Header activeTab={activeTab} setActiveTab={setActiveTab} />
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className="w-full max-w-[1920px] mx-auto px-4 sm:px-6 lg:px-8 py-6">
         {activeTab === "studio" && (
           <MotionStudio
             key={activeProject?.project_id}

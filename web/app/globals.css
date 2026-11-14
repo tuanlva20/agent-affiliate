@@ -22,4 +22,38 @@ body {
   .text-balance {
     text-wrap: balance;
   }
+
+  /* Hide scrollbar for Chrome, Safari, Edge and Opera */
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  /* Hide scrollbar for Firefox and IE */
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+}
+
+/* Global Dark-Theme Scrollbar (Theme from Palette per Impeccable Craft Floor) */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #0B0B14;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #252538;
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #41AA6C;
+}
+
+* {
+  scrollbar-color: #252538 #0B0B14;
+  scrollbar-width: thin;
 }
