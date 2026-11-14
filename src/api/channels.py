@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 import uuid
 
@@ -12,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.deps import get_db
 from src.database.models import Channel, VideoJob
+from src.services.browser_adapter import BrowserAdapter
 from src.services.facebook_publisher import FacebookPublisher
 
 router = APIRouter(prefix="/api/channels", tags=["Channels"])
@@ -29,6 +31,11 @@ class CreateChannelRequest(BaseModel):
 
 class WarmupRequest(BaseModel):
     duration_minutes: int = Field(5, ge=1, le=60)
+
+
+class ImportCookieRequest(BaseModel):
+    cookies: str
+    format: Optional[str] = Field("auto", description="auto, json, netscape, or header")
 
 
 class PublishRequest(BaseModel):
@@ -142,4 +149,47 @@ async def publish_video(
         "post_url": result.post_url,
         "comment_status": result.comment_status,
         "channel_status": result.channel_status,
+    }
+
+
+@router.post("/{channel_id}/import-cookies")
+async def import_cookies(
+    channel_id: str,
+    req: ImportCookieRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """Imports cookie credentials and transitions channel to ready_to_post."""
+    channel = await db.get(Channel, channel_id)
+    if not channel:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Channel not found: {channel_id}",
+        )
+
+    adapter = BrowserAdapter(mock_mode=True)
+    try:
+        res = await adapter.import_cookies_to_profile(
+            profile_id=channel.browser_profile_id,
+            raw_cookie=req.cookies,
+            platform=channel.platform,
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        )
+
+    channel.lifecycle_status = "ready_to_post"
+    meta = dict(channel.platform_metadata or {})
+    meta["cookies_imported_at"] = datetime.now(timezone.utc).isoformat()
+    meta["cookie_count"] = res.get("cookie_count", 0)
+    channel.platform_metadata = meta
+    await db.commit()
+    await db.refresh(channel)
+
+    return {
+        "channel_id": channel.channel_id,
+        "lifecycle_status": channel.lifecycle_status,
+        "cookie_count": res.get("cookie_count", 0),
+        "authenticated": res.get("authenticated", True),
     }

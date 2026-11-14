@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+import json
 import logging
 import os
 import urllib.parse
@@ -170,6 +171,79 @@ def parse_and_validate_proxy(proxy_url: Optional[str]) -> Optional[ProxyConfig]:
         raise
     except Exception as e:
         raise BrowserProxyError(f"Malformed proxy URL '{clean_url}': {e}") from e
+
+
+def parse_cookies_input(raw_cookie: str, default_domain: str = ".facebook.com") -> List[Dict[str, Any]]:
+    """Parses JSON Array, Netscape HTTP Cookie, or Raw Header cookie strings.
+
+    Args:
+        raw_cookie: Input cookie string in any of the 3 formats.
+        default_domain: Domain to use if none is specified.
+
+    Returns:
+        List of standard Playwright cookie dicts: [{'name': ..., 'value': ..., 'domain': ..., 'path': ...}]
+
+    Raises:
+        BrowserAdapterError: If cookie input is empty or contains no valid name=value pairs.
+    """
+    if not raw_cookie or not isinstance(raw_cookie, str) or not raw_cookie.strip():
+        raise BrowserAdapterError("Invalid cookie format: cookie string cannot be empty.")
+
+    raw = raw_cookie.strip()
+    cookies: List[Dict[str, Any]] = []
+
+    # Format 1: JSON Array
+    if (raw.startswith("[") and raw.endswith("]")) or (raw.startswith("{") and raw.endswith("}")):
+        try:
+            data = json.loads(raw)
+            if isinstance(data, dict):
+                data = [data]
+            if isinstance(data, list):
+                for item in data:
+                    if isinstance(item, dict) and "name" in item and "value" in item:
+                        cookies.append({
+                            "name": str(item["name"]).strip(),
+                            "value": str(item["value"]),
+                            "domain": str(item.get("domain") or default_domain).strip(),
+                            "path": str(item.get("path") or "/"),
+                        })
+        except Exception:
+            pass
+
+    # Format 2: Netscape format (tab-separated columns: domain, flag, path, secure, expiration, name, value)
+    if not cookies and "\t" in raw:
+        for line in raw.splitlines():
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            parts = line.split("\t")
+            if len(parts) >= 7:
+                cookies.append({
+                    "name": parts[5].strip(),
+                    "value": parts[6].strip(),
+                    "domain": parts[0].strip() or default_domain,
+                    "path": parts[2].strip() or "/",
+                })
+
+    # Format 3: Raw cookie header (e.g. "c_user=100012345; xs=28%3Aabcd; datr=xyz;")
+    if not cookies:
+        pairs = [p.strip() for p in raw.split(";") if p.strip()]
+        for p in pairs:
+            if "=" in p:
+                k, v = p.split("=", 1)
+                k_clean = k.strip()
+                if k_clean and not k_clean.startswith("#"):
+                    cookies.append({
+                        "name": k_clean,
+                        "value": v.strip(),
+                        "domain": default_domain,
+                        "path": "/",
+                    })
+
+    if not cookies:
+        raise BrowserAdapterError("Invalid cookie format: could not extract valid name=value pairs.")
+
+    return cookies
 
 
 # ---------------------------------------------------------------------------
@@ -714,3 +788,49 @@ class BrowserAdapter:
                 await self.stop_browser(profile_id)
             except Exception as e:
                 logger.warning(f"Error stopping profile: {e}")
+
+    async def import_cookies_to_profile(
+        self,
+        profile_id: str,
+        raw_cookie: str,
+        platform: str = "facebook",
+    ) -> Dict[str, Any]:
+        """Imports and verifies cookie credentials for a given browser profile."""
+        clean_platform = (platform or "facebook").lower().strip()
+        default_domain = f".{clean_platform}.com" if not clean_platform.startswith(".") else clean_platform
+        cookies = parse_cookies_input(raw_cookie, default_domain=default_domain)
+
+        if self.mock_mode:
+            if profile_id not in self.profiles:
+                self.profiles[profile_id] = {
+                    "profile_id": profile_id,
+                    "name": profile_id,
+                    "proxy": None,
+                    "status": "stopped",
+                    "cdp_url": None,
+                    "options": {},
+                    "cookies": cookies,
+                }
+            else:
+                self.profiles[profile_id]["cookies"] = cookies
+            return {
+                "success": True,
+                "profile_id": profile_id,
+                "cookie_count": len(cookies),
+                "authenticated": len(cookies) > 0,
+            }
+
+        # Live CDP injection
+        cdp_url = await self.start_browser(profile_id)
+        browser, context, _ = await self.connect_over_cdp(cdp_url)
+        try:
+            await context.add_cookies(cookies)
+        finally:
+            await self.stop_browser(profile_id)
+
+        return {
+            "success": True,
+            "profile_id": profile_id,
+            "cookie_count": len(cookies),
+            "authenticated": len(cookies) > 0,
+        }
