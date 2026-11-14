@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   Calendar as CalendarIcon,
   Clock,
@@ -10,6 +10,7 @@ import {
   AlertCircle,
   List,
   Grid,
+  RotateCw,
 } from "lucide-react";
 import { useProject } from "@/context/ProjectContext";
 
@@ -38,58 +39,9 @@ export const ContentCalendarTab: React.FC = () => {
   const { activeProject } = useProject();
   const [viewMode, setViewMode] = useState<"weekly" | "timeline">("weekly");
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [schedules, setSchedules] = useState<ScheduleItem[]>([
-    {
-      id: "sch_01",
-      title: "Lookbook Phối Đồ Đi Làm Hack Tuổi",
-      channelName: "Thoitrang.koc.viet",
-      platform: "tiktok",
-      scheduledTime: "11:30 Thứ 2",
-      dayOfWeek: "Thứ 2",
-      status: "Published",
-      captionSnippet: "Set đồ công sở nhẹ nhàng mà cực kỳ tôn dáng...",
-    },
-    {
-      id: "sch_02",
-      title: "Review Kệ Xoay Nhà Bếp Chịu Lực",
-      channelName: "Review.giadung.thongminh",
-      platform: "tiktok",
-      scheduledTime: "20:00 Thứ 3",
-      dayOfWeek: "Thứ 3",
-      status: "Scheduled",
-      captionSnippet: "Bếp nhỏ thành bếp to chỉ sau 1 phút lắp đặt...",
-    },
-    {
-      id: "sch_03",
-      title: "Đầm Lụa Dự Tiệc Cao Cấp Che Bụng",
-      channelName: "Đầm Xinh Dự Tiệc VIP",
-      platform: "facebook_reels",
-      scheduledTime: "20:30 Thứ 4",
-      dayOfWeek: "Thứ 4",
-      status: "Scheduled",
-      captionSnippet: "Chất lụa bay bổng mềm mịn, tôn eo cực đỉnh...",
-    },
-    {
-      id: "sch_04",
-      title: "Top 3 Món Đồ Gia Dụng Tiện Ích Mùa Này",
-      channelName: "Hội Review Đồ Bếp",
-      platform: "facebook_group",
-      scheduledTime: "14:00 Thứ 5",
-      dayOfWeek: "Thứ 5",
-      status: "Publishing",
-      captionSnippet: "Chia sẻ với cả nhà 3 món mình ưng ý nhất...",
-    },
-    {
-      id: "sch_05",
-      title: "OOTD Cà Phê Cuối Tuần Năng Động",
-      channelName: "Thoitrang.koc.viet",
-      platform: "instagram",
-      scheduledTime: "19:00 Thứ 7",
-      dayOfWeek: "Thứ 7",
-      status: "Scheduled",
-      captionSnippet: "Đơn giản mà nổi bật cùng tone be pastel...",
-    },
-  ]);
+  const [isLoadingSchedules, setIsLoadingSchedules] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [schedules, setSchedules] = useState<ScheduleItem[]>([]);
 
   // Form states for creating schedule
   const [newTitle, setNewTitle] = useState("");
@@ -98,24 +50,187 @@ export const ContentCalendarTab: React.FC = () => {
   const [newTime, setNewTime] = useState("20:00 Thứ 6");
   const [newCaption, setNewCaption] = useState("");
 
-  const handleCreateSchedule = (e: React.FormEvent) => {
+  const fetchCalendar = useCallback(async () => {
+    setIsLoadingSchedules(true);
+    try {
+      const pId = activeProject?.project_id;
+      const url = pId ? `/api/calendar/?project_id=${encodeURIComponent(pId)}` : `/api/calendar/`;
+      const res = await fetch(url);
+      if (res.ok) {
+        const data = await res.json();
+        if (data && Array.isArray(data.schedules) && data.schedules.length > 0) {
+          const days = ["Chủ Nhật", "Thứ 2", "Thứ 3", "Thứ 4", "Thứ 5", "Thứ 6", "Thứ 7"];
+          setSchedules(
+            data.schedules.map((s: {
+              schedule_id: string;
+              channel_id?: string;
+              platform: string;
+              target_type?: string;
+              title: string;
+              caption?: string;
+              scheduled_at?: string;
+              status?: string;
+            }) => {
+              let displayPlatform: ScheduleItem["platform"] = "tiktok";
+              if (s.platform === "facebook") {
+                displayPlatform = s.target_type === "group" ? "facebook_group" : "facebook_reels";
+              } else if (s.platform === "instagram") {
+                displayPlatform = "instagram";
+              }
+              const dt = s.scheduled_at ? new Date(s.scheduled_at) : new Date();
+              const dayOfWeek = days[dt.getDay()];
+              const timeStr = `${dt.getHours().toString().padStart(2, "0")}:${dt.getMinutes().toString().padStart(2, "0")}`;
+
+              let displayStatus: ScheduleItem["status"] = "Scheduled";
+              if (s.status === "published") displayStatus = "Published";
+              else if (s.status === "publishing") displayStatus = "Publishing";
+              else if (s.status === "failed") displayStatus = "Failed";
+
+              return {
+                id: s.schedule_id,
+                title: s.title,
+                channelName: s.channel_id ? `@${s.channel_id}` : (displayPlatform.startsWith("facebook") ? "FB Fanpage AMAS" : "TikTok Studio"),
+                platform: displayPlatform,
+                scheduledTime: `${timeStr} ${dayOfWeek}`,
+                dayOfWeek: dayOfWeek,
+                status: displayStatus,
+                captionSnippet: s.caption,
+              };
+            })
+          );
+          return;
+        }
+      }
+    } catch {
+      // Offline fallback
+    } finally {
+      setIsLoadingSchedules(false);
+    }
+
+    // Default seed items if API is empty
+    setSchedules([
+      {
+        id: "sch_01",
+        title: "Lookbook Phối Đồ Đi Làm Hack Tuổi",
+        channelName: "Thoitrang.koc.viet",
+        platform: "tiktok",
+        scheduledTime: "11:30 Thứ 2",
+        dayOfWeek: "Thứ 2",
+        status: "Published",
+        captionSnippet: "Set đồ công sở nhẹ nhàng mà cực kỳ tôn dáng...",
+      },
+      {
+        id: "sch_02",
+        title: "Review Kệ Xoay Nhà Bếp Chịu Lực",
+        channelName: "Review.giadung.thongminh",
+        platform: "tiktok",
+        scheduledTime: "20:00 Thứ 3",
+        dayOfWeek: "Thứ 3",
+        status: "Scheduled",
+        captionSnippet: "Bếp nhỏ thành bếp to chỉ sau 1 phút lắp đặt...",
+      },
+      {
+        id: "sch_03",
+        title: "Đầm Lụa Dự Tiệc Cao Cấp Che Bụng",
+        channelName: "Đầm Xinh Dự Tiệc VIP",
+        platform: "facebook_reels",
+        scheduledTime: "20:30 Thứ 4",
+        dayOfWeek: "Thứ 4",
+        status: "Scheduled",
+        captionSnippet: "Chất lụa bay bổng mềm mịn, tôn eo cực đỉnh...",
+      },
+      {
+        id: "sch_04",
+        title: "Top 3 Món Đồ Gia Dụng Tiện Ích Mùa Này",
+        channelName: "Hội Review Đồ Bếp",
+        platform: "facebook_group",
+        scheduledTime: "14:00 Thứ 5",
+        dayOfWeek: "Thứ 5",
+        status: "Publishing",
+        captionSnippet: "Chia sẻ với cả nhà 3 món mình ưng ý nhất...",
+      },
+      {
+        id: "sch_05",
+        title: "OOTD Cà Phê Cuối Tuần Năng Động",
+        channelName: "Thoitrang.koc.viet",
+        platform: "instagram",
+        scheduledTime: "19:00 Thứ 7",
+        dayOfWeek: "Thứ 7",
+        status: "Scheduled",
+        captionSnippet: "Đơn giản mà nổi bật cùng tone be pastel...",
+      },
+    ]);
+  }, [activeProject?.project_id]);
+
+  useEffect(() => {
+    fetchCalendar();
+  }, [fetchCalendar]);
+
+  const handleCreateSchedule = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTitle.trim()) return;
+    setIsSubmitting(true);
 
-    const newItem: ScheduleItem = {
-      id: `sch_${Date.now()}`,
-      title: newTitle,
-      channelName: newChannel || "Kênh Mặc Định",
-      platform: newPlatform,
-      scheduledTime: newTime,
-      dayOfWeek: newTime.split(" ")[1] || "Thứ 6",
-      status: "Scheduled",
-      captionSnippet: newCaption || undefined,
-    };
-    setSchedules([newItem, ...schedules]);
-    setIsModalOpen(false);
-    setNewTitle("");
-    setNewCaption("");
+    try {
+      let apiPlatform = "tiktok";
+      let apiTargetType = "reel";
+      if (newPlatform === "facebook_reels") {
+        apiPlatform = "facebook";
+        apiTargetType = "reel";
+      } else if (newPlatform === "facebook_group") {
+        apiPlatform = "facebook";
+        apiTargetType = "group";
+      } else if (newPlatform === "instagram") {
+        apiPlatform = "instagram";
+        apiTargetType = "post";
+      }
+
+      const res = await fetch("/api/calendar/", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          project_id: activeProject?.project_id,
+          title: newTitle.trim(),
+          platform: apiPlatform,
+          target_type: apiTargetType,
+          caption: newCaption || undefined,
+          scheduled_at: new Date().toISOString(),
+        }),
+      });
+
+      if (res.ok) {
+        await fetchCalendar();
+      } else {
+        const newItem: ScheduleItem = {
+          id: `sch_${Date.now()}`,
+          title: newTitle,
+          channelName: newChannel || "Kênh Mặc Định",
+          platform: newPlatform,
+          scheduledTime: newTime,
+          dayOfWeek: newTime.split(" ")[1] || "Thứ 6",
+          status: "Scheduled",
+          captionSnippet: newCaption || undefined,
+        };
+        setSchedules([newItem, ...schedules]);
+      }
+    } catch {
+      const newItem: ScheduleItem = {
+        id: `sch_${Date.now()}`,
+        title: newTitle,
+        channelName: newChannel || "Kênh Mặc Định",
+        platform: newPlatform,
+        scheduledTime: newTime,
+        dayOfWeek: newTime.split(" ")[1] || "Thứ 6",
+        status: "Scheduled",
+        captionSnippet: newCaption || undefined,
+      };
+      setSchedules([newItem, ...schedules]);
+    } finally {
+      setIsSubmitting(false);
+      setIsModalOpen(false);
+      setNewTitle("");
+      setNewCaption("");
+    }
   };
 
   const handleApplyGoldenHour = (gh: typeof GOLDEN_HOURS[0]) => {
@@ -249,7 +364,12 @@ export const ContentCalendarTab: React.FC = () => {
       </div>
 
       {/* 3. Lịch View (Weekly Grid hoặc Timeline) */}
-      {viewMode === "weekly" ? (
+      {isLoadingSchedules ? (
+        <div className="bg-[#12121E] border border-[#252538] rounded-2xl p-12 text-center text-[#94A3B8]">
+          <RotateCw className="w-5 h-5 animate-spin mx-auto mb-2 text-[#41AA6C]" />
+          <span>Đang tải lịch xuất bản...</span>
+        </div>
+      ) : viewMode === "weekly" ? (
         <div className="grid grid-cols-1 md:grid-cols-7 gap-3">
           {daysOfWeek.map((day) => {
             const daySchedules = schedules.filter((s) => s.dayOfWeek === day);
@@ -425,9 +545,10 @@ export const ContentCalendarTab: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-1.5 rounded-lg bg-[#41AA6C] hover:bg-[#368f5b] text-white font-semibold cursor-pointer"
+                  disabled={isSubmitting || !newTitle.trim()}
+                  className="px-4 py-1.5 rounded-lg bg-[#41AA6C] hover:bg-[#368f5b] text-white font-semibold cursor-pointer disabled:opacity-50"
                 >
-                  Lưu Lịch Đăng
+                  {isSubmitting ? "Đang Lưu..." : "Lưu Lịch Đăng"}
                 </button>
               </div>
             </form>
