@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { X, Info, Sparkles, Layers, Check, Plus, Tag } from "lucide-react";
 import { useProject, PresetItem } from "@/context/ProjectContext";
 
@@ -54,8 +55,27 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({ isOpen, 
   const [websiteUrl, setWebsiteUrl] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [activeTooltip, setActiveTooltip] = useState<string | null>(null);
+  const [mounted, setMounted] = useState(false);
 
-  if (!isOpen) return null;
+  // Client-side portal mounting check
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  // Close on Escape key press
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && isOpen) {
+        onClose();
+      }
+    };
+    if (isOpen) {
+      window.addEventListener("keydown", handleKeyDown);
+    }
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isOpen, onClose]);
+
+  if (!isOpen || !mounted) return null;
 
   const handleApplyPreset = (preset: PresetItem) => {
     setName(preset.name);
@@ -66,13 +86,27 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({ isOpen, 
     setNegativeKeywords(preset.negative_keywords.join(", "));
   };
 
-  const handleAddChip = (field: string, text: string) => {
-    if (field === "name") setName(text);
-    if (field === "niche_brief") setNicheBrief((prev) => (prev ? `${prev}, ${text}` : text));
-    if (field === "target_audience") setTargetAudience((prev) => (prev ? `${prev}, ${text}` : text));
-    if (field === "tone_of_voice") setToneOfVoice((prev) => (prev ? `${prev}, ${text}` : text));
-    if (field === "trigger_keywords") setTriggerKeywords((prev) => (prev ? `${prev}, ${text}` : text));
-    if (field === "negative_keywords") setNegativeKeywords((prev) => (prev ? `${prev}, ${text}` : text));
+  const handleAddChip = (field: string, chipValue: string) => {
+    switch (field) {
+      case "name":
+        setName(chipValue);
+        break;
+      case "niche_brief":
+        setNicheBrief((prev) => (prev ? `${prev}, ${chipValue}` : chipValue));
+        break;
+      case "target_audience":
+        setTargetAudience((prev) => (prev ? `${prev}, ${chipValue}` : chipValue));
+        break;
+      case "tone_of_voice":
+        setToneOfVoice((prev) => (prev ? `${prev}, ${chipValue}` : chipValue));
+        break;
+      case "trigger_keywords":
+        setTriggerKeywords((prev) => (prev ? `${prev}, ${chipValue}` : chipValue));
+        break;
+      case "negative_keywords":
+        setNegativeKeywords((prev) => (prev ? `${prev}, ${chipValue}` : chipValue));
+        break;
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -86,8 +120,8 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({ isOpen, 
         niche_brief: nicheBrief.trim() || undefined,
         target_audience: targetAudience.trim() || undefined,
         tone_of_voice: toneOfVoice.trim() || undefined,
-        trigger_keywords: triggerKeywords ? triggerKeywords.split(",").map((s) => s.trim()).filter(Boolean) : [],
-        negative_keywords: negativeKeywords ? negativeKeywords.split(",").map((s) => s.trim()).filter(Boolean) : [],
+        trigger_keywords: triggerKeywords ? triggerKeywords.split(",").map((k) => k.trim()).filter(Boolean) : undefined,
+        negative_keywords: negativeKeywords ? negativeKeywords.split(",").map((k) => k.trim()).filter(Boolean) : undefined,
         website_url: websiteUrl.trim() || undefined,
       });
       onClose();
@@ -98,51 +132,61 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({ isOpen, 
     }
   };
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="relative w-full max-w-2xl max-h-[90vh] overflow-y-auto bg-[#0B0B14] border border-[#252538] rounded-2xl shadow-2xl p-6 text-[#F8FAFC]">
-        {/* Header */}
-        <div className="flex items-center justify-between pb-4 border-b border-[#252538]">
+  const modalContent = (
+    <div
+      onClick={onClose}
+      className="fixed top-16 inset-x-0 bottom-0 z-40 flex items-center justify-center p-4 md:p-6 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200"
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="relative w-full max-w-2xl max-h-[calc(100vh-6rem)] flex flex-col bg-[#0B0B14] border border-[#252538] rounded-2xl shadow-2xl text-[#F8FAFC] overflow-hidden"
+      >
+        {/* Sticky Header */}
+        <div className="shrink-0 flex items-center justify-between p-5 border-b border-[#252538] bg-[#0E0E18]">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-[#41AA6C]/10 border border-[#41AA6C]/30 flex items-center justify-center">
               <Layers className="w-5 h-5 text-[#41AA6C]" />
             </div>
             <div>
-              <h2 className="text-lg font-bold text-white tracking-tight">Tạo Project Mới</h2>
-              <p className="text-xs text-[#94A3B8]">Cấu hình không gian làm việc và huấn luyện ngữ cảnh AI cho ngách affiliate</p>
+              <h2 className="text-base font-bold text-white tracking-tight">Tạo Project Mới</h2>
+              <p className="text-xs text-[#94A3B8]">
+                Cấu hình không gian làm việc và huấn luyện ngữ cảnh AI cho ngách affiliate
+              </p>
             </div>
           </div>
           <button
+            type="button"
             onClick={onClose}
             className="p-2 rounded-lg text-[#94A3B8] hover:text-white hover:bg-white/5 transition-all duration-150 cursor-pointer"
+            aria-label="Đóng"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* 1-Click Presets Header */}
-        <div className="mt-4 p-3 rounded-xl bg-[#12121E] border border-[#252538]">
-          <div className="flex items-center gap-2 mb-2 text-xs font-semibold text-[#41AA6C] uppercase tracking-wider">
-            <Sparkles className="w-3.5 h-3.5" />
-            <span>Mẫu Dự Án Có Sẵn (1-Click Preset)</span>
+        {/* Scrollable Form Body */}
+        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-5 md:p-6 space-y-4">
+          {/* 1-Click Presets Header */}
+          <div className="p-3 rounded-xl bg-[#12121E] border border-[#252538]">
+            <div className="flex items-center gap-2 mb-2 text-xs font-semibold text-[#41AA6C] uppercase tracking-wider">
+              <Sparkles className="w-3.5 h-3.5" />
+              <span>Mẫu Dự Án Có Sẵn (1-Click Preset)</span>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              {presets.map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => handleApplyPreset(p)}
+                  className="text-left p-2 rounded-lg bg-[#181828] hover:bg-[#41AA6C]/15 border border-[#252538] hover:border-[#41AA6C]/40 transition-all duration-150 cursor-pointer group"
+                >
+                  <div className="text-xs font-medium text-white group-hover:text-[#41AA6C] truncate">{p.name}</div>
+                  <div className="text-[10px] text-[#94A3B8] truncate">{p.target_audience.split(",")[0]}</div>
+                </button>
+              ))}
+            </div>
           </div>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-            {presets.map((p) => (
-              <button
-                key={p.id}
-                type="button"
-                onClick={() => handleApplyPreset(p)}
-                className="text-left p-2 rounded-lg bg-[#181828] hover:bg-[#41AA6C]/15 border border-[#252538] hover:border-[#41AA6C]/40 transition-all duration-150 cursor-pointer group"
-              >
-                <div className="text-xs font-medium text-white group-hover:text-[#41AA6C] truncate">{p.name}</div>
-                <div className="text-[10px] text-[#94A3B8] truncate">{p.target_audience.split(",")[0]}</div>
-              </button>
-            ))}
-          </div>
-        </div>
 
-        {/* Form */}
-        <form onSubmit={handleSubmit} className="mt-4 space-y-4">
           {/* 1. Tên Dự Án */}
           <div>
             <div className="flex items-center justify-between mb-1.5">
@@ -333,7 +377,9 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({ isOpen, 
           {/* 5. Từ Khóa Kích Hoạt Seeding Group */}
           <div>
             <div className="flex items-center gap-1.5 mb-1.5">
-              <label className="text-xs font-semibold text-slate-200">5. Từ Khóa Kích Hoạt Seeding Group (phân tách bởi dấu phẩy)</label>
+              <label className="text-xs font-semibold text-slate-200">
+                5. Từ Khóa Kích Hoạt Seeding Group (phân tách bởi dấu phẩy)
+              </label>
               <div className="relative">
                 <button
                   type="button"
@@ -378,7 +424,9 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({ isOpen, 
           {/* 6. Từ Khóa Cấm / Tiêu Cực */}
           <div>
             <div className="flex items-center gap-1.5 mb-1.5">
-              <label className="text-xs font-semibold text-slate-200">6. Từ Khóa Cấm / Tiêu Cực (phân tách bởi dấu phẩy)</label>
+              <label className="text-xs font-semibold text-slate-200">
+                6. Từ Khóa Cấm / Tiêu Cực (phân tách bởi dấu phẩy)
+              </label>
               <div className="relative">
                 <button
                   type="button"
@@ -422,7 +470,9 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({ isOpen, 
 
           {/* Website URL (optional for OpenSEO) */}
           <div>
-            <label className="block text-xs font-semibold text-slate-200 mb-1.5">Website Domain / Landing Page (Tùy chọn)</label>
+            <label className="block text-xs font-semibold text-slate-200 mb-1.5">
+              Website Domain / Landing Page (Tùy chọn)
+            </label>
             <input
               type="url"
               value={websiteUrl}
@@ -431,37 +481,40 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({ isOpen, 
               className="w-full px-3 py-2 rounded-lg bg-[#12121E] border border-[#252538] focus:border-[#41AA6C] text-sm text-white focus:outline-none transition-all duration-150"
             />
           </div>
-
-          {/* Actions */}
-          <div className="flex items-center justify-end gap-3 pt-4 border-t border-[#252538]">
-            <button
-              type="button"
-              onClick={onClose}
-              disabled={isSubmitting}
-              className="px-4 py-2 rounded-lg text-sm font-medium text-[#94A3B8] hover:text-white hover:bg-white/5 transition-all duration-150 cursor-pointer"
-            >
-              Hủy
-            </button>
-            <button
-              type="submit"
-              disabled={isSubmitting || !name.trim()}
-              className="inline-flex items-center gap-2 px-5 py-2 rounded-lg bg-[#41AA6C] hover:bg-[#368f5b] text-white text-sm font-medium transition-all duration-150 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
-            >
-              {isSubmitting ? (
-                <>
-                  <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin" />
-                  <span>Đang tạo...</span>
-                </>
-              ) : (
-                <>
-                  <Check className="w-4 h-4" />
-                  <span>Tạo Project</span>
-                </>
-              )}
-            </button>
-          </div>
         </form>
+
+        {/* Sticky Actions Footer */}
+        <div className="shrink-0 flex items-center justify-end gap-3 p-4 px-6 border-t border-[#252538] bg-[#0E0E18]">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={isSubmitting}
+            className="px-4 py-2 rounded-xl text-xs font-medium text-[#94A3B8] hover:text-white bg-[#181828] border border-[#252538] hover:border-slate-700 transition-all duration-150 cursor-pointer"
+          >
+            Hủy
+          </button>
+          <button
+            type="button"
+            onClick={handleSubmit}
+            disabled={isSubmitting || !name.trim()}
+            className="inline-flex items-center gap-2 px-5 py-2 rounded-xl bg-[#41AA6C] hover:bg-[#34925b] text-white text-xs font-semibold transition-all duration-150 shadow-sm shadow-[#41AA6C]/25 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+          >
+            {isSubmitting ? (
+              <>
+                <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+                <span>Đang tạo...</span>
+              </>
+            ) : (
+              <>
+                <Check className="w-4 h-4" />
+                <span>Tạo Project & Áp Dụng Ngay</span>
+              </>
+            )}
+          </button>
+        </div>
       </div>
     </div>
   );
+
+  return createPortal(modalContent, document.body);
 };

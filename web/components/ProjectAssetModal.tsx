@@ -2,6 +2,7 @@
 /* eslint-disable @next/next/no-img-element */
 
 import React, { useState, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import {
   X,
   Upload,
@@ -249,6 +250,25 @@ export const ProjectAssetModal: React.FC<ProjectAssetModalProps> = ({
 
   // Custom Assets stored in localStorage per project
   const [customAssets, setCustomAssets] = useState<ProjectAsset[]>([]);
+  const [mounted, setMounted] = useState(false);
+
+  // Client-side portal mounting check
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  // Close on Escape key press
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && isOpen) {
+        onClose();
+      }
+    };
+    if (isOpen) {
+      window.addEventListener("keydown", handleKeyDown);
+    }
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isOpen, onClose]);
 
   // Sync category when initialCategory changes
   useEffect(() => {
@@ -285,7 +305,7 @@ export const ProjectAssetModal: React.FC<ProjectAssetModalProps> = ({
     }
   };
 
-  if (!isOpen) return null;
+  if (!isOpen || !mounted) return null;
 
   // Combine preset assets with custom assets
   const presetList =
@@ -399,9 +419,15 @@ export const ProjectAssetModal: React.FC<ProjectAssetModalProps> = ({
 
   const currentActiveId = currentSelectedId?.[activeCategory];
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="relative w-full max-w-4xl max-h-[90vh] flex flex-col bg-[#0B0B14] border border-[#252538] rounded-2xl shadow-2xl text-[#F8FAFC] overflow-hidden">
+  const modalContent = (
+    <div
+      onClick={onClose}
+      className="fixed top-16 inset-x-0 bottom-0 z-40 flex items-center justify-center p-4 md:p-6 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200"
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="relative w-full max-w-4xl max-h-[calc(100vh-6rem)] flex flex-col bg-[#0B0B14] border border-[#252538] rounded-2xl shadow-2xl text-[#F8FAFC] overflow-hidden"
+      >
         {/* Header */}
         <div className="flex items-center justify-between p-5 border-b border-[#252538] bg-[#12121E]">
           <div className="flex items-center gap-3">
@@ -748,4 +774,6 @@ export const ProjectAssetModal: React.FC<ProjectAssetModalProps> = ({
       </div>
     </div>
   );
+
+  return createPortal(modalContent, document.body);
 };
